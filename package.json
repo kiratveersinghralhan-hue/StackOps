@@ -1,0 +1,13 @@
+{
+  "name": "stackops-clean-user-based-fullset",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "StackOps one-folder clean set using the user's uploaded working UI as base",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
