@@ -1,6 +1,6 @@
 window.STACKOPS_CONFIG = {
-  supabaseUrl: "https://spxrqtgktqfyyvirnmdr.supabase.co",
-  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNweHJxdGdrdHFmeXl2aXJubWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNjYzMTgsImV4cCI6MjA5MDY0MjMxOH0.aMPX7nOldUP-T_qkIx7YKd8nXtjNeDTXnNsWXcnY6mA",
+  supabaseUrl: "https://ffagzruaerzftqwmnbmp.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYWd6cnVhZXJ6ZnRxd21uYm1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNTYyMTcsImV4cCI6MjA5MDczMjIxN30.H_bI5O0YLMOjvnyGyi6HIq1scBHydRebB3lx7nJkVzc",
   googleEnabled: true,
   riotEnabled: false,
   appName: "StackOps"
