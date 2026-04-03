@@ -1,8 +1,11 @@
-StackOps patched build
+StackOps auth fix patch
 
-This patch fixes the stuck intro by making it independent from auth/config loading.
-Default config keeps Supabase off so the site opens to guest homepage first.
+Changed:
+1. Added id="authEmail" and id="authPassword" to the auth modal inputs so app.js can read them.
+2. Removed leading whitespace from supabaseAnonKey in config.js.
 
-When ready for Supabase:
-1. Put real values in config.js
-2. Set googleEnabled = true
+Replace your current files with these patched versions:
+- index.html
+- config.js
+
+app.js is included unchanged for convenience.
