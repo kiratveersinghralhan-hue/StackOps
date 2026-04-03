@@ -1,1 +1,0 @@
-Rectified auth + logout + Google return + quick action wiring.
