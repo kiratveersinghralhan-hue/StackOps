@@ -1,1 +1,1 @@
-Final auth/UI fix bundle. Replace repo-root frontend files only. Keeps backend files untouched.
+Intro stall fix bundle. Replaces repo-root frontend files only. Main fix is crash-safe app.js with intro exit.
