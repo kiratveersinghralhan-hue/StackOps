@@ -1,1 +1,1 @@
-Final total fix bundle. Replace repo root files with these.
+Final auth/UI fix bundle. Replace repo-root frontend files only. Keeps backend files untouched.
