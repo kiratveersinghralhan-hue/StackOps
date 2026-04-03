@@ -1,1 +1,1 @@
-Fixes: normal signup blank page by forcing appShell visibility; Google login returning to sign-in by exchanging OAuth code for session on load.
+Patch fixes Google redirect by exchanging code and syncing session early. Also wires create post / team / tournament buttons.
