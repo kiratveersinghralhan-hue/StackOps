@@ -40,55 +40,55 @@
   }
 
   async function syncSession() {
-    if (!state.supabase) {
-      setLoggedIn(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await state.supabase.auth.getSession();
-      if (error) throw error;
-
-      const session = data?.session || null;
-      if (session?.user) {
-        setLoggedIn(true);
-        const openProfileBtn = qs("#openProfileBtn");
-        if (openProfileBtn && session.user.email) {
-          openProfileBtn.textContent = session.user.email;
-        }
-        closeAuth();
-      } else {
-        setLoggedIn(false);
-      }
-    } catch (err) {
-      console.error("Session sync failed:", err);
-      setLoggedIn(false);
-    }
+  if (!state.supabase) {
+    setLoggedIn(false);
+    return;
   }
 
-  function setLoggedIn(flag) {
-    state.loggedIn = flag;
+  try {
+    const { data, error } = await state.supabase.auth.getSession();
+    if (error) throw error;
 
-    const guestHome = qs("#guestHome");
-    const appShell = qs("#appShell");
-    const guestActions = qs("#guestActions");
-    const userActions = qs("#userActions");
+    const session = data?.session || null;
 
-    if (flag) {
-      hide(guestHome);
-      show(appShell);
-      if (appShell) appShell.classList.add("ready");
-      hide(guestActions);
-      show(userActions);
-    } else {
-      show(guestHome);
-      hide(appShell);
-      show(guestActions);
-      hide(userActions);
+    if (session?.user) {
+      setLoggedIn(true);
+
       const openProfileBtn = qs("#openProfileBtn");
-      if (openProfileBtn) openProfileBtn.textContent = "My Profile";
+      if (openProfileBtn && session.user.email) {
+        openProfileBtn.textContent = session.user.email;
+      }
+
+      closeAuth();
+    } else {
+      setLoggedIn(false);
     }
+  } catch (err) {
+    console.error("Session sync failed:", err);
+    setLoggedIn(false);
   }
+}
+  function setLoggedIn(flag) {
+  state.loggedIn = flag;
+
+  const guestHome = qs("#guestHome");
+  const appShell = qs("#appShell");
+  const guestActions = qs("#guestActions");
+  const userActions = qs("#userActions");
+
+  if (flag) {
+    hide(guestHome);
+    show(appShell);
+    hide(guestActions);
+    show(userActions);
+    closeAuth();
+  } else {
+    show(guestHome);
+    hide(appShell);
+    show(guestActions);
+    hide(userActions);
+  }
+}
 
   function openAuth(mode = "signin") {
     state.authMode = mode;
@@ -233,30 +233,30 @@
   }
 
   async function handleGoogleAuth() {
-    if (!cfg.googleEnabled) {
-      toast("Enable Google provider in Supabase, then try again.");
-      return;
-    }
-    if (!state.supabase) {
-      toast("Supabase is not configured yet. Add real values in config.js.");
-      return;
-    }
-
-    try {
-      const { error } = await state.supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-          queryParams: { prompt: "select_account" }
-        }
-      });
-
-      if (error) throw error;
-    } catch (err) {
-      toast(err.message || "Google sign-in failed.");
-      console.error(err);
-    }
+  if (!cfg.googleEnabled) {
+    alert("Enable Google provider in Supabase, then try again.");
+    return;
   }
+
+  if (!state.supabase) {
+    alert("Supabase is not configured yet. Add real values in config.js.");
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+
+    if (error) throw error;
+  } catch (err) {
+    alert(err.message || "Google sign-in failed.");
+    console.error(err);
+  }
+}
 
   function bindAuthFlow() {
     qsa("[data-open-auth]").forEach((btn) =>
@@ -406,49 +406,46 @@
   }
 
   async function init() {
-    initSupabase();
-    bindAuthFlow();
-    bindNav();
-    bindDetails();
-    bindTeamReportButtons();
-    bindAvatarUpload();
-    bindReportFlow();
-    bindDetailModal();
-    bindQuickActions();
-    bindLogout();
-    initIntro();
+  initSupabase();
+  bindAuthFlow();
+  bindNav();
+  bindDetails();
+  bindTeamReportButtons();
+  bindAvatarUpload();
+  bindReportFlow();
+  bindDetailModal();
+  bindQuickActions();
+  bindLogout();
+  initIntro();
 
-    if (state.supabase) {
-      try {
-        const { data, error } = await state.supabase.auth.getSession();
-        if (error) throw error;
-        if (data?.session?.user) {
-          setLoggedIn(true);
-          const openProfileBtn = qs("#openProfileBtn");
-          if (data.session.user.email && openProfileBtn) {
-            openProfileBtn.textContent = data.session.user.email;
-          }
-          closeAuth();
+  if (state.supabase) {
+    try {
+      const { data, error } = await state.supabase.auth.getSession();
+      if (error) throw error;
+
+      if (data?.session?.user) {
+        setLoggedIn(true);
+
+        const openProfileBtn = qs("#openProfileBtn");
+        if (openProfileBtn && data.session.user.email) {
+          openProfileBtn.textContent = data.session.user.email;
         }
-      } catch (err) {
-        console.error("Initial session restore failed:", err);
-      }
-    }
 
-    await syncSession();
-
-    if (state.supabase) {
-      state.supabase.auth.onAuthStateChange(async (event) => {
-        if (event === "SIGNED_OUT") {
-          setLoggedIn(false);
-          closeAuth();
-          return;
-        }
-        await syncSession();
         closeAuth();
-      });
+      }
+    } catch (err) {
+      console.error("Initial session restore failed:", err);
     }
   }
 
+  await syncSession();
+
+  if (state.supabase) {
+    state.supabase.auth.onAuthStateChange(async () => {
+      await syncSession();
+      closeAuth();
+    });
+  }
+}
   document.addEventListener("DOMContentLoaded", init, { once: true });
 })();
