@@ -134,9 +134,9 @@
             <article class="panel">
               <h4>Quick actions</h4>
               <div class="stack">
-                <button class="btn ghost" id="createTeamQuickBtn">Create team</button>
-                <button class="btn ghost" id="newPostQuickBtn">New post</button>
-                <button class="btn ghost" id="joinTournamentQuickBtn">Join tournament</button>
+                <button class="btn ghost">Create team</button>
+                <button class="btn ghost">New post</button>
+                <button class="btn ghost">Join tournament</button>
               </div>
             </article>
           </div>
@@ -168,7 +168,7 @@
         <div class="view" id="view-teams">
           <div class="list-head">
             <h3>Teams</h3>
-            <button class="btn primary" id="createTeamBtn">Create team</button>
+            <button class="btn primary">Create team</button>
           </div>
           <div class="card-grid">
             <article class="entity-card clickable" data-detail-type="team" data-name="Pulse Vector" data-meta="Recruiting • Controller needed">
@@ -191,7 +191,7 @@
         <div class="view" id="view-posts">
           <div class="list-head">
             <h3>Community</h3>
-            <button class="btn primary" id="createPostBtn">Create post</button>
+            <button class="btn primary">Create post</button>
           </div>
           <div class="card-grid">
             <article class="entity-card clickable" data-detail-type="post" data-name="Need consistent duo for ranked" data-meta="Posted by NeonArc">
@@ -212,7 +212,7 @@
         <div class="view" id="view-tournaments">
           <div class="list-head">
             <h3>Tournaments</h3>
-            <button class="btn primary" id="createTournamentBtn">Create tournament</button>
+            <button class="btn primary">Create tournament</button>
           </div>
           <div class="card-grid">
             <article class="entity-card clickable" data-detail-type="tournament" data-name="Night Ops Cup" data-meta="Starts Friday • Max 16 teams">
@@ -287,8 +287,8 @@
         <h3 id="authTitle">Sign in</h3>
       </div>
       <div class="stack">
-        <input class="field-input" id="authEmail" placeholder="Email" type="email" autocomplete="email" />
-        <input class="field-input" id="authPassword" placeholder="Password" type="password" autocomplete="current-password" />
+        <input class="field-input" placeholder="Email" />
+        <input class="field-input" placeholder="Password" type="password" />
         <button class="btn primary full" id="submitAuthBtn">Continue</button>
         <button class="btn ghost full" id="googleBtn">Continue with Google</button>
         <button class="btn ghost full" id="riotBtn">Connect Riot (coming soon)</button>
@@ -311,10 +311,10 @@
         <button class="tag">Fake rank / fake profile</button>
         <button class="tag">Spam</button>
       </div>
-      <textarea class="field-input textarea" rows="5" placeholder="Additional details"></textarea>
+      <textarea class="field-input textarea" id="reportBody" rows="5" placeholder="Additional details"></textarea>
       <div class="modal-actions">
         <button class="btn ghost" id="cancelReportBtn">Cancel</button>
-        <button class="btn primary">Submit report</button>
+        <button class="btn primary" id="submitReportBtn">Submit report</button>
       </div>
     </div>
   </div>
@@ -332,10 +332,8 @@
       </div>
     </div>
   </div>
-
-  <script src="app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="config.js?v=23"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>
