@@ -1,13 +1,30 @@
-
 (() => {
-  const state = { loggedIn: false, authMode: "signin", supabase: null, reportTarget: null };
+  const state = {
+    loggedIn: false,
+    authMode: "signin",
+    supabase: null,
+    reportTarget: null
+  };
+
   const cfg = window.STACKOPS_CONFIG || {};
   const qs = (s, p = document) => p.querySelector(s);
   const qsa = (s, p = document) => Array.from(p.querySelectorAll(s));
 
-  function show(el) { if (!el) return; el.classList.remove("hidden"); el.style.display = ""; }
-  function hide(el) { if (!el) return; el.classList.add("hidden"); el.style.display = "none"; }
-  function toast(msg) { alert(msg); }
+  function show(el) {
+    if (!el) return;
+    el.classList.remove("hidden");
+    el.style.display = "";
+  }
+
+  function hide(el) {
+    if (!el) return;
+    el.classList.add("hidden");
+    el.style.display = "none";
+  }
+
+  function toast(msg) {
+    alert(msg);
+  }
 
   function initSupabase() {
     try {
@@ -34,7 +51,9 @@
 
   async function restoreOAuthSessionIfNeeded() {
     if (!state.supabase) return false;
-    let touched = false;
+
+    let touchedUrl = false;
+
     try {
       const url = new URL(window.location.href);
       const hasCode = !!url.searchParams.get("code");
@@ -44,22 +63,26 @@
       if (hasCode && state.supabase.auth.exchangeCodeForSession) {
         const { error } = await state.supabase.auth.exchangeCodeForSession(window.location.href);
         if (error) console.error("OAuth exchange failed:", error);
-        touched = true;
+        touchedUrl = true;
       }
 
-      if (hasCode || hasHashToken || hasOAuthError) touched = true;
+      if (hasCode || hasHashToken || hasOAuthError) {
+        touchedUrl = true;
+      }
 
-      if (touched) {
+      if (touchedUrl) {
         window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
       }
     } catch (err) {
       console.error("OAuth restore failed:", err);
     }
-    return touched;
+
+    return touchedUrl;
   }
 
   function setLoggedIn(flag, user = null) {
     state.loggedIn = flag;
+
     const guestHome = qs("#guestHome");
     const appShell = qs("#appShell");
     const guestActions = qs("#guestActions");
@@ -68,24 +91,28 @@
     if (flag) {
       hide(guestHome);
       show(appShell);
+      hide(guestActions);
+      show(userActions);
+
       if (appShell) {
         appShell.classList.add("ready");
         appShell.style.opacity = "1";
         appShell.style.transform = "none";
         appShell.style.visibility = "visible";
       }
-      hide(guestActions);
-      show(userActions);
+
       if (user?.email) {
         const profileBtn = qs("#openProfileBtn");
         if (profileBtn) profileBtn.textContent = user.email;
       }
+
       closeAuth();
     } else {
       show(guestHome);
       hide(appShell);
       show(guestActions);
       hide(userActions);
+
       const profileBtn = qs("#openProfileBtn");
       if (profileBtn) profileBtn.textContent = "My Profile";
     }
@@ -100,10 +127,12 @@
     try {
       const { data, error } = await state.supabase.auth.getSession();
       if (error) throw error;
+
       const session = data?.session || null;
 
       if (session?.user) {
         setLoggedIn(true, session.user);
+        closeAuth();
         return true;
       }
 
@@ -119,19 +148,30 @@
   function openAuth(mode = "signin") {
     state.authMode = mode;
     const title = qs("#authTitle");
-    if (title) title.textContent = mode === "signup" ? "Create account" : "Sign in";
+    if (title) {
+      title.textContent = mode === "signup" ? "Create account" : "Sign in";
+    }
     show(qs("#authModal"));
   }
 
-  function closeAuth() { hide(qs("#authModal")); }
+  function closeAuth() {
+    hide(qs("#authModal"));
+  }
 
   function switchView(viewName) {
-    qsa(".rail-item").forEach((b) => b.classList.toggle("active", b.dataset.view === viewName));
-    qsa(".view").forEach((v) => v.classList.remove("active"));
+    qsa(".rail-item").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.view === viewName);
+    });
+
+    qsa(".view").forEach((view) => {
+      view.classList.remove("active");
+    });
+
     const panel = qs(`#view-${viewName}`);
     if (panel) panel.classList.add("active");
+
     const title = qs("#viewTitle");
-    const activeBtn = qsa(".rail-item").find((b) => b.dataset.view === viewName);
+    const activeBtn = qsa(".rail-item").find((btn) => btn.dataset.view === viewName);
     if (title && activeBtn) title.textContent = activeBtn.textContent.trim();
   }
 
@@ -139,15 +179,26 @@
     const typeEl = qs("#detailType");
     const nameEl = qs("#detailName");
     const metaEl = qs("#detailMeta");
+
     if (typeEl) typeEl.textContent = `${String(type || "detail").toUpperCase()} VIEW`;
     if (nameEl) nameEl.textContent = name || "Item";
     if (metaEl) metaEl.textContent = meta || "";
+
     show(qs("#detailModal"));
   }
 
-  function closeDetail() { hide(qs("#detailModal")); }
-  function openReport(target = null) { state.reportTarget = target; show(qs("#reportModal")); }
-  function closeReport() { hide(qs("#reportModal")); }
+  function closeDetail() {
+    hide(qs("#detailModal"));
+  }
+
+  function openReport(target = null) {
+    state.reportTarget = target;
+    show(qs("#reportModal"));
+  }
+
+  function closeReport() {
+    hide(qs("#reportModal"));
+  }
 
   async function fallbackSignin(email, password) {
     const signin = await state.supabase.auth.signInWithPassword({ email, password });
@@ -160,8 +211,15 @@
     const email = qs("#authEmail")?.value?.trim();
     const password = qs("#authPassword")?.value || "";
 
-    if (!state.supabase) return toast("Supabase is not configured yet. Add real values in config.js.");
-    if (!email || !password) return toast("Enter email and password.");
+    if (!state.supabase) {
+      toast("Supabase is not configured yet. Add real values in config.js.");
+      return;
+    }
+
+    if (!email || !password) {
+      toast("Enter email and password.");
+      return;
+    }
 
     try {
       if (state.authMode === "signup") {
@@ -189,6 +247,7 @@
 
       const signin = await state.supabase.auth.signInWithPassword({ email, password });
       if (signin.error) throw signin.error;
+
       await syncSession();
       closeAuth();
     } catch (err) {
@@ -198,14 +257,26 @@
   }
 
   async function handleGoogleAuth() {
-    if (!cfg.googleEnabled) return toast("Enable Google provider in Supabase, then try again.");
-    if (!state.supabase) return toast("Supabase is not configured yet. Add real values in config.js.");
+    if (!cfg.googleEnabled) {
+      toast("Enable Google provider in Supabase, then try again.");
+      return;
+    }
+
+    if (!state.supabase) {
+      toast("Supabase is not configured yet. Add real values in config.js.");
+      return;
+    }
 
     try {
+      closeAuth();
+
       const { error } = await state.supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin }
+        options: {
+          redirectTo: window.location.origin
+        }
       });
+
       if (error) throw error;
     } catch (err) {
       console.error(err);
@@ -214,23 +285,33 @@
   }
 
   function bindAuthFlow() {
-    qsa("[data-open-auth]").forEach((btn) => btn.addEventListener("click", () => openAuth(btn.dataset.openAuth)));
+    qsa("[data-open-auth]").forEach((btn) => {
+      btn.addEventListener("click", () => openAuth(btn.dataset.openAuth));
+    });
+
     const closeBtn = qs("#closeAuthModal");
     if (closeBtn) closeBtn.addEventListener("click", closeAuth);
+
     const submitBtn = qs("#submitAuthBtn");
     if (submitBtn) submitBtn.addEventListener("click", handleEmailAuth);
+
     const googleBtn = qs("#googleBtn");
     if (googleBtn) googleBtn.addEventListener("click", handleGoogleAuth);
+
     const riotBtn = qs("#riotBtn");
     if (riotBtn) riotBtn.addEventListener("click", () => toast("Riot sign-in is coming soon."));
+
     const notificationsBtn = qs("#openNotificationsBtn");
     if (notificationsBtn) notificationsBtn.addEventListener("click", () => toast("Notifications panel coming soon."));
+
     const profileBtn = qs("#openProfileBtn");
     if (profileBtn) profileBtn.addEventListener("click", () => switchView("settings"));
   }
 
   function bindNav() {
-    qsa(".rail-item").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+    qsa(".rail-item").forEach((btn) => {
+      btn.addEventListener("click", () => switchView(btn.dataset.view));
+    });
   }
 
   function bindDetails() {
@@ -253,6 +334,7 @@
     const wire = (selector, view, title, meta) => {
       const btn = qs(selector);
       if (!btn) return;
+
       btn.addEventListener("click", () => {
         if (view) switchView(view);
         if (title) openDetail("action", title, meta || "");
@@ -284,7 +366,11 @@
     if (submitBtn) {
       submitBtn.addEventListener("click", async () => {
         const body = qs("#reportBody")?.value?.trim() || "";
-        const payload = { target: state.reportTarget, details: body, createdAt: new Date().toISOString() };
+        const payload = {
+          target: state.reportTarget,
+          details: body,
+          createdAt: new Date().toISOString()
+        };
 
         if (state.supabase) {
           try {
@@ -311,15 +397,19 @@
       });
     }
 
-    qsa(".tag").forEach((tag) => tag.addEventListener("click", () => {
-      const body = qs("#reportBody");
-      if (body && !body.value.trim()) body.value = tag.textContent.trim();
-    }));
+    qsa(".tag").forEach((tag) => {
+      tag.addEventListener("click", () => {
+        const body = qs("#reportBody");
+        if (body && !body.value.trim()) body.value = tag.textContent.trim();
+      });
+    });
 
-    qsa(".team-report-btn").forEach((btn) => btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openReport({ type: "team", id: "team-card" });
-    }));
+    qsa(".team-report-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openReport({ type: "team", id: "team-card" });
+      });
+    });
   }
 
   function bindDetailModal() {
@@ -338,8 +428,11 @@
       input.addEventListener("change", () => {
         const file = input.files && input.files[0];
         if (!file) return;
+
         const reader = new FileReader();
-        reader.onload = (e) => { preview.src = e.target.result; };
+        reader.onload = (e) => {
+          preview.src = e.target.result;
+        };
         reader.readAsDataURL(file);
       });
     }
@@ -380,6 +473,7 @@
     if (!intro) return;
 
     let finished = false;
+
     const hideIntro = () => {
       if (finished) return;
       finished = true;
@@ -415,13 +509,7 @@
     }
 
     if (state.supabase) {
-      state.supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === "SIGNED_OUT") {
-          setLoggedIn(false);
-          closeAuth();
-          return;
-        }
-
+      state.supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
           setLoggedIn(true, session.user);
           closeAuth();
@@ -429,7 +517,6 @@
         }
 
         await syncSession();
-        closeAuth();
       });
     } else {
       setLoggedIn(false);
