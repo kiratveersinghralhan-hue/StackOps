@@ -214,17 +214,12 @@
 
   async function handleEmailAuth() {
     const email = qs("#authEmail")?.value?.trim();
-    const password = qs("#authPassword")?.value || "";
+const password = qs("#authPassword")?.value || "";
 
-    if (!state.supabase) {
-      alert("Supabase is not configured yet. Add real values in config.js.");
-      return;
-    }
-
-    if (!email || !password) {
-      alert("Enter email and password.");
-      return;
-    }
+if (!email || !password) {
+  alert("Enter email and password.");
+  return;
+}
 
     try {
       let result;
