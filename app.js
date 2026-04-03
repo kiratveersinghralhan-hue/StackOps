@@ -121,29 +121,30 @@
   }
 
   async function syncSession() {
-    if (!state.supabase) {
-      setLoggedIn(false);
-      return false;
-    }
-
-    try {
-      const { data, error } = await state.supabase.auth.getSession();
-      if (error) throw error;
-
-      const user = data?.session?.user || null;
-      if (user) {
-        setLoggedIn(true, user);
-        return true;
-      }
-
-      setLoggedIn(false);
-      return false;
-    } catch (err) {
-      console.error("Session sync failed:", err);
-      setLoggedIn(false);
-      return false;
-    }
+  if (!state.supabase) {
+    setLoggedIn(false);
+    return false;
   }
+
+  try {
+    const { data, error } = await state.supabase.auth.getSession();
+    if (error) throw error;
+
+    const user = data?.session?.user || null;
+
+    if (user) {
+      setLoggedIn(true, user);
+      return true;
+    }
+
+    setLoggedIn(false);
+    return false;
+  } catch (err) {
+    console.error("Session sync failed:", err);
+    setLoggedIn(false);
+    return false;
+  }
+}
 
   function openAuth(mode = "signin") {
     state.authMode = mode;
@@ -234,26 +235,29 @@
   }
 
   function bindLogout() {
-    const logoutBtn = qs("#logoutBtn");
-    if (!logoutBtn) return;
+  const logoutBtn = qs("#logoutBtn");
+  if (!logoutBtn) return;
 
-    logoutBtn.addEventListener("click", async (e) => {
-      e.preventDefault();
-      try {
-        if (state.supabase) {
-          const { error } = await state.supabase.auth.signOut();
-          if (error) throw error;
-        }
-      } catch (err) {
-        console.error("Logout failed:", err);
-        toast(err.message || "Logout failed.");
-      } finally {
-        setLoggedIn(false);
-        closeAuth();
-        window.location.reload();
+  logoutBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+
+    try {
+      if (state.supabase) {
+        const { error } = await state.supabase.auth.signOut({ scope: "global" });
+        if (error) throw error;
       }
-    });
-  }
+    } catch (err) {
+      console.error("Logout failed:", err);
+      toast(err.message || "Logout failed.");
+    } finally {
+      localStorage.clear();
+      sessionStorage.clear();
+      setLoggedIn(false);
+      closeAuth();
+      window.location.href = window.location.origin;
+    }
+  });
+}
 
   function bindSafeClicks() {
     const profileBtn = qs("#openProfileBtn");
@@ -281,15 +285,11 @@
 
     if (state.supabase) {
       state.supabase.auth.onAuthStateChange(async (_event, session) => {
-        if (session?.user) {
-          setLoggedIn(true, session.user);
-          closeAuth();
-        } else {
-          await syncSession();
-        }
-      });
-    }
+  if (session?.user) {
+    setLoggedIn(true, session.user);
+  } else {
+    setLoggedIn(false);
   }
-
+});
   document.addEventListener("DOMContentLoaded", init, { once: true });
 })();
