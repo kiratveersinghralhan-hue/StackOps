@@ -1,2 +1,1 @@
-Patched create-team, logout, and stronger auth/session restore.
-Replace these files in repo root.
+Fixes: normal signup blank page by forcing appShell visibility; Google login returning to sign-in by exchanging OAuth code for session on load.
