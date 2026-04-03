@@ -250,28 +250,33 @@
   }
 
   async function handleGoogleAuth() {
-    if (!cfg.googleEnabled) {
-      alert("Enable Google provider in Supabase, then try again.");
-      return;
-    }
-
-    if (!state.supabase) {
-      alert("Supabase is not configured yet. Add real values in config.js.");
-      return;
-    }
-
-    try {
-      const { error } = await state.supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: window.location.origin }
-      });
-
-      if (error) throw error;
-    } catch (err) {
-      alert(err.message || "Google sign-in failed.");
-      console.error(err);
-    }
+  if (!cfg.googleEnabled) {
+    alert("Enable Google provider in Supabase, then try again.");
+    return;
   }
+
+  if (!state.supabase) {
+    alert("Supabase is not configured yet. Add real values in config.js.");
+    return;
+  }
+
+  try {
+    const { error } = await state.supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin,
+        queryParams: {
+          prompt: "select_account"
+        }
+      }
+    });
+
+    if (error) throw error;
+  } catch (err) {
+    alert(err.message || "Google sign-in failed.");
+    console.error(err);
+  }
+}
 
   function bindAuthFlow() {
     qsa("[data-open-auth]").forEach((btn) =>
@@ -357,20 +362,30 @@
   }
 
   function bindLogout() {
-    const btn = qs("#logoutBtn");
-    if (btn) {
-      btn.addEventListener("click", async () => {
-        if (state.supabase) {
-          try {
-            await state.supabase.auth.signOut();
-          } catch (err) {
-            console.error(err);
-          }
-        }
-        setLoggedIn(false);
-      });
+  const btn = qs("#logoutBtn");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    try {
+      if (state.supabase) {
+        const { error } = await state.supabase.auth.signOut({ scope: "local" });
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.error("Logout failed:", err);
+      alert(err.message || "Logout failed.");
+    } finally {
+      closeAuth();
+      setLoggedIn(false);
+
+      const openProfileBtn = qs("#openProfileBtn");
+      if (openProfileBtn) openProfileBtn.textContent = "My Profile";
+
+      await syncSession();
+      window.location.href = window.location.origin;
     }
-  }
+  });
+}
 
   function initIntro() {
     const intro = qs("#introScreen");
