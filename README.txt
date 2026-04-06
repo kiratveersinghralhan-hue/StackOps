@@ -1,1 +1,1 @@
-Team fix bundle: adds Riot Valorant region select and handles missing rank_target column. Run team_fix.sql, then replace frontend files.
+Teams upgraded. Run teams_schema.sql first, then replace repo-root frontend files.

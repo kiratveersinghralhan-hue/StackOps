@@ -259,3 +259,5 @@ button,input,select,textarea{font:inherit}
   .settings-grid{grid-template-columns:1fr}
   .side-rail{grid-template-columns:repeat(2,minmax(160px,1fr))}
 }
+
+.entity-meta{display:flex;gap:8px;flex-wrap:wrap;color:rgba(255,255,255,.72);font-size:14px;margin-top:8px}

@@ -170,7 +170,7 @@
             <h3>Teams</h3>
             <button class="btn primary" id="createTeamBtn">Create team</button>
           </div>
-          <div class="card-grid">
+          <div class="card-grid" id="teamsList">
             <article class="entity-card clickable" data-detail-type="team" data-name="Pulse Vector" data-meta="Recruiting • Controller needed">
               <div>
                 <h4>Pulse Vector</h4>
@@ -332,8 +332,47 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-backdrop hidden" id="teamModal">
+    <div class="modal glass">
+      <button class="icon-close" id="closeTeamModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">TEAM OPS</span>
+        <h3 id="teamModalTitle">Create team</h3>
+      </div>
+      <div class="stack">
+        <input class="field-input" id="teamName" placeholder="Team name" type="text" />
+        <textarea class="field-input textarea" id="teamDescription" rows="4" placeholder="Team description"></textarea>
+        <select class="field-input" id="teamRegion">
+          <option value="">Select Riot Valorant region</option>
+          <option value="AP">AP</option>
+          <option value="BR">BR</option>
+          <option value="EU">EU</option>
+          <option value="KR">KR</option>
+          <option value="LATAM">LATAM</option>
+          <option value="NA">NA</option>
+        </select>
+        <input class="field-input" id="teamRankTarget" placeholder="Target rank" type="text" />
+        <select class="field-input" id="teamRoleNeeded">
+          <option value="">Role needed</option>
+          <option value="Controller">Controller</option>
+          <option value="Duelist">Duelist</option>
+          <option value="Initiator">Initiator</option>
+          <option value="Sentinel">Sentinel</option>
+          <option value="Flex">Flex</option>
+          <option value="IGL">IGL</option>
+          <option value="Any">Any</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelTeamBtn" type="button">Cancel</button>
+        <button class="btn primary" id="saveTeamBtn" type="button">Save team</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=33"></script>
-  <script src="app.js?v=33"></script>
+  <script src="config.js?v=40"></script>
+  <script src="app.js?v=40"></script>
 </body>
 </html>
