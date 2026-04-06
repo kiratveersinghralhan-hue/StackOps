@@ -260,37 +260,60 @@ button,input,select,textarea{font:inherit}
   .side-rail{grid-template-columns:repeat(2,minmax(160px,1fr))}
 }
 
-.entity-meta{display:flex;gap:8px;flex-wrap:wrap;color:rgba(255,255,255,.72);font-size:14px;margin-top:8px}
 
+/* v60 premium popups */
 .premium-modal{
-  border:1px solid rgba(143,232,255,.14);
-  box-shadow:0 20px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04);
+  position:relative;
+  background:
+    radial-gradient(circle at top left, rgba(143,232,255,.12), transparent 34%),
+    radial-gradient(circle at top right, rgba(246,220,120,.10), transparent 30%),
+    linear-gradient(180deg, rgba(8,18,40,.96), rgba(4,10,25,.97));
+  border:1px solid rgba(143,232,255,.18);
+  box-shadow:
+    0 18px 60px rgba(0,0,0,.46),
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 0 0 1px rgba(255,255,255,.02);
+  overflow:hidden;
+}
+.premium-modal::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(135deg, rgba(143,232,255,.08), transparent 35%, rgba(246,220,120,.06));
+  opacity:.9;
+}
+.premium-modal .eyebrow{
+  letter-spacing:.18em;
 }
 .danger-modal{
-  border-color:rgba(255,120,120,.18);
+  border-color:rgba(255,120,120,.22);
+  box-shadow:
+    0 18px 60px rgba(0,0,0,.50),
+    0 0 34px rgba(255,110,110,.08),
+    inset 0 1px 0 rgba(255,255,255,.05);
 }
-.entity-actions-inline{
-  display:flex;
-  gap:10px;
-  margin-top:12px;
-  flex-wrap:wrap;
+.btn.danger,
+.delete-team-btn{
+  background:linear-gradient(135deg, #ff7a7a 0%, #ffb26a 100%) !important;
+  color:#111827 !important;
+  border:none !important;
+  box-shadow:0 10px 24px rgba(255,120,110,.22);
 }
-.btn.danger{
-  background:linear-gradient(135deg, rgba(255,110,110,.95), rgba(255,170,120,.92));
-  color:#111827;
+.delete-team-btn{
+  font-weight:700;
 }
-.btn.small{
-  padding:10px 14px;
-  font-size:14px;
+.btn.danger:hover,
+.delete-team-btn:hover{
+  transform:translateY(-1px);
+  box-shadow:0 14px 28px rgba(255,120,110,.28);
 }
-.entity-meta{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  color:rgba(255,255,255,.72);
-  font-size:14px;
-  margin-top:8px;
+.modal-head h3{
+  text-shadow:0 2px 18px rgba(255,255,255,.06);
 }
 .subtle-panel{
-  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:18px;
+  padding:16px 18px;
+  background:rgba(255,255,255,.035);
 }

@@ -1,1 +1,1 @@
-Next upgrade bundle: premium create/delete team, create post, create tournament. Run SQL first, then replace frontend files.
+v60 premium fix bundle. Run schema_fix_v60.sql first, then replace frontend files.
