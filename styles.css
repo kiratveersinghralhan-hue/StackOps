@@ -259,3 +259,5 @@ button,input,select,textarea{font:inherit}
   .settings-grid{grid-template-columns:1fr}
   .side-rail{grid-template-columns:repeat(2,minmax(160px,1fr))}
 }
+
+.empty-state{padding:20px;border:1px solid rgba(255,255,255,.08);border-radius:20px;color:rgba(255,255,255,.7)}

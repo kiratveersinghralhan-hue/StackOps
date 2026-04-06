@@ -1,1 +1,1 @@
-Intro stall fix bundle. Replaces repo-root frontend files only. Main fix is crash-safe app.js with intro exit.
+Create Team feature added. Replace repo-root frontend files with these.
