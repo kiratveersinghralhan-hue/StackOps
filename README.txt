@@ -1,1 +1,1 @@
-Teams upgraded. Run teams_schema.sql first, then replace repo-root frontend files.
+Next upgrade bundle: premium create/delete team, create post, create tournament. Run SQL first, then replace frontend files.

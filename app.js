@@ -3,7 +3,10 @@
     loggedIn: false,
     authMode: "signin",
     supabase: null,
-    reportTarget: null
+    reportTarget: null,
+    currentUser: null,
+    deleteTeamId: null,
+    deleteTeamName: null
   };
 
   const cfg = window.STACKOPS_CONFIG || {};
@@ -26,7 +29,6 @@
   function initIntro() {
     const intro = qs("#introScreen");
     if (!intro) return;
-
     let done = false;
     const finish = () => {
       if (done) return;
@@ -36,7 +38,6 @@
         if (intro.parentNode) intro.parentNode.removeChild(intro);
       }, 900);
     };
-
     window.addEventListener("load", () => setTimeout(finish, 1600), { once: true });
     setTimeout(finish, 3500);
   }
@@ -90,6 +91,8 @@
 
   function setLoggedIn(flag, user = null) {
     state.loggedIn = flag;
+    state.currentUser = user || null;
+
     const guestHome = qs("#guestHome");
     const appShell = qs("#appShell");
     const guestActions = qs("#guestActions");
@@ -100,14 +103,12 @@
       show(appShell);
       hide(guestActions);
       show(userActions);
-
       if (appShell) {
         appShell.classList.add("ready");
         appShell.style.opacity = "1";
         appShell.style.transform = "none";
         appShell.style.visibility = "visible";
       }
-
       const profileBtn = qs("#openProfileBtn");
       if (profileBtn && user?.email) profileBtn.textContent = user.email;
       closeAuth();
@@ -205,7 +206,6 @@
           }
           throw result.error;
         }
-
         if (!result.data.session) {
           closeAuth();
           toast("Account created. Check email if confirmation is enabled.");
@@ -245,12 +245,10 @@
   async function submitReport() {
     const body = qs("#reportBody")?.value?.trim() || "";
     const payload = { target: state.reportTarget, details: body, createdAt: new Date().toISOString() };
-
     if (state.supabase) {
       try {
         const { data: sessionData } = await state.supabase.auth.getSession();
         const reporter = sessionData?.session?.user || null;
-
         const { error } = await state.supabase.from("reports").insert({
           reporter_id: reporter?.id || null,
           target_type: payload.target?.type || "unknown",
@@ -266,7 +264,6 @@
         console.error("Remote report failed, fallback local:", err);
       }
     }
-
     const existing = JSON.parse(localStorage.getItem("stackops_reports") || "[]");
     existing.push(payload);
     localStorage.setItem("stackops_reports", JSON.stringify(existing));
@@ -276,9 +273,28 @@
 
   function openTeamModal() { show(qs("#teamModal")); }
   function closeTeamModal() { hide(qs("#teamModal")); }
+  function openPostModal() { show(qs("#postModal")); }
+  function closePostModal() { hide(qs("#postModal")); }
+  function openTournamentModal() { show(qs("#tournamentModal")); }
+  function closeTournamentModal() { hide(qs("#tournamentModal")); }
+
+  function openDeleteTeamModal(id, name) {
+    state.deleteTeamId = id;
+    state.deleteTeamName = name || "this team";
+    const text = qs("#deleteTeamText");
+    if (text) text.textContent = `Delete "${state.deleteTeamName}" permanently?`;
+    show(qs("#deleteTeamModal"));
+  }
+
+  function closeDeleteTeamModal() {
+    state.deleteTeamId = null;
+    state.deleteTeamName = null;
+    hide(qs("#deleteTeamModal"));
+  }
 
   function renderTeamCard(team) {
     const roleNeeded = team.role_needed || "Any";
+    const canDelete = state.currentUser && team.created_by === state.currentUser.id;
     return `
       <article class="entity-card clickable"
         data-detail-type="team"
@@ -297,7 +313,38 @@
             <span>${roleNeeded}</span>
           </div>
         </div>
-        <button class="btn ghost small team-report-btn" type="button">Report</button>
+        <div class="entity-actions-inline">
+          ${canDelete ? `<button class="btn danger small delete-team-btn" data-id="${team.id}" data-name="${(team.name || "").replace(/"/g, '&quot;')}" type="button">Delete</button>` : ""}
+          <button class="btn ghost small team-report-btn" type="button">Report</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderPostCard(post) {
+    return `
+      <article class="entity-card clickable" data-detail-type="post" data-name="${post.title || "Post"}" data-meta="Posted by community">
+        <div>
+          <h4>${post.title || "Untitled post"}</h4>
+          <p>${post.content || ""}</p>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderTournamentCard(item) {
+    const start = item.start_date ? new Date(item.start_date).toLocaleString() : "TBD";
+    return `
+      <article class="entity-card clickable" data-detail-type="tournament" data-name="${item.name || "Tournament"}" data-meta="${item.region || "Unknown region"} • ${start}">
+        <div>
+          <h4>${item.name || "Untitled tournament"}</h4>
+          <p>${item.description || "No description yet."}</p>
+          <div class="entity-meta">
+            <span>${item.region || "Unknown region"}</span>
+            <span>•</span>
+            <span>${start}</span>
+          </div>
+        </div>
       </article>
     `;
   }
@@ -305,28 +352,61 @@
   async function loadTeams() {
     const teamsList = qs("#teamsList");
     if (!teamsList || !state.supabase) return;
-
     try {
       const { data, error } = await state.supabase.from("teams").select("*").order("created_at", { ascending: false });
       if (error) throw error;
-
       if (!data || !data.length) {
         teamsList.innerHTML = `<div class="panel">No teams yet.</div>`;
         return;
       }
-
       teamsList.innerHTML = data.map(renderTeamCard).join("");
       bindDetails();
       bindReportFlow();
+      bindDeleteTeamButtons();
     } catch (err) {
       console.error("Load teams failed:", err);
       teamsList.innerHTML = `<div class="panel">Could not load teams.</div>`;
     }
   }
 
+  async function loadPosts() {
+    const postsList = qs("#postsList");
+    if (!postsList || !state.supabase) return;
+    try {
+      const { data, error } = await state.supabase.from("posts").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      if (!data || !data.length) {
+        postsList.innerHTML = `<div class="panel">No posts yet.</div>`;
+        return;
+      }
+      postsList.innerHTML = data.map(renderPostCard).join("");
+      bindDetails();
+    } catch (err) {
+      console.error("Load posts failed:", err);
+      postsList.innerHTML = `<div class="panel">Could not load posts.</div>`;
+    }
+  }
+
+  async function loadTournaments() {
+    const tournamentsList = qs("#tournamentsList");
+    if (!tournamentsList || !state.supabase) return;
+    try {
+      const { data, error } = await state.supabase.from("tournaments").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      if (!data || !data.length) {
+        tournamentsList.innerHTML = `<div class="panel">No tournaments yet.</div>`;
+        return;
+      }
+      tournamentsList.innerHTML = data.map(renderTournamentCard).join("");
+      bindDetails();
+    } catch (err) {
+      console.error("Load tournaments failed:", err);
+      tournamentsList.innerHTML = `<div class="panel">Could not load tournaments.</div>`;
+    }
+  }
+
   async function handleCreateTeam() {
     if (!state.supabase) return toast("Supabase is not configured yet.");
-
     const name = qs("#teamName")?.value?.trim();
     const description = qs("#teamDescription")?.value?.trim() || "";
     const region = qs("#teamRegion")?.value?.trim() || "";
@@ -339,7 +419,6 @@
     try {
       const { data: sessionData, error: sessionError } = await state.supabase.auth.getSession();
       if (sessionError) throw sessionError;
-
       const user = sessionData?.session?.user;
       if (!user) return toast("Please log in first.");
 
@@ -354,24 +433,19 @@
       };
 
       let { error } = await state.supabase.from("teams").insert(payload);
-
       if (error && /rank_target/i.test(error.message || "")) {
         delete payload.rank_target;
         ({ error } = await state.supabase.from("teams").insert(payload));
       }
-
       if (error && /role_needed/i.test(error.message || "")) {
         delete payload.role_needed;
         ({ error } = await state.supabase.from("teams").insert(payload));
       }
-
       if (error) throw error;
 
-      qs("#teamName").value = "";
-      qs("#teamDescription").value = "";
-      qs("#teamRegion").value = "";
-      qs("#teamRankTarget").value = "";
-      if (qs("#teamRoleNeeded")) qs("#teamRoleNeeded").value = "";
+      ["#teamName","#teamDescription","#teamRegion","#teamRankTarget","#teamRoleNeeded"].forEach(sel => {
+        const el = qs(sel); if (el) el.value = "";
+      });
 
       closeTeamModal();
       await loadTeams();
@@ -380,6 +454,91 @@
     } catch (err) {
       console.error("Create team failed:", err);
       toast(err.message || "Could not create team.");
+    }
+  }
+
+  async function handleDeleteTeam() {
+    if (!state.supabase || !state.deleteTeamId) return;
+
+    try {
+      const { error } = await state.supabase.from("teams").delete().eq("id", state.deleteTeamId);
+      if (error) throw error;
+      closeDeleteTeamModal();
+      await loadTeams();
+      toast("Team deleted.");
+    } catch (err) {
+      console.error("Delete team failed:", err);
+      toast(err.message || "Could not delete team.");
+    }
+  }
+
+  async function handleCreatePost() {
+    if (!state.supabase) return toast("Supabase is not configured yet.");
+    const title = qs("#postTitle")?.value?.trim();
+    const content = qs("#postContent")?.value?.trim() || "";
+    if (!title || !content) return toast("Enter title and content.");
+
+    try {
+      const { data: sessionData, error: sessionError } = await state.supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const user = sessionData?.session?.user;
+      if (!user) return toast("Please log in first.");
+
+      const { error } = await state.supabase.from("posts").insert({
+        created_by: user.id,
+        title,
+        content
+      });
+      if (error) throw error;
+
+      qs("#postTitle").value = "";
+      qs("#postContent").value = "";
+      closePostModal();
+      await loadPosts();
+      switchView("posts");
+      toast("Post published.");
+    } catch (err) {
+      console.error("Create post failed:", err);
+      toast(err.message || "Could not create post.");
+    }
+  }
+
+  async function handleCreateTournament() {
+    if (!state.supabase) return toast("Supabase is not configured yet.");
+    const name = qs("#tournamentName")?.value?.trim();
+    const description = qs("#tournamentDescription")?.value?.trim() || "";
+    const region = qs("#tournamentRegion")?.value?.trim() || "";
+    const startDate = qs("#tournamentStart")?.value || null;
+
+    if (!name) return toast("Enter tournament name.");
+    if (!region) return toast("Select region.");
+
+    try {
+      const { data: sessionData, error: sessionError } = await state.supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      const user = sessionData?.session?.user;
+      if (!user) return toast("Please log in first.");
+
+      const { error } = await state.supabase.from("tournaments").insert({
+        created_by: user.id,
+        name,
+        description,
+        region,
+        start_date: startDate
+      });
+      if (error) throw error;
+
+      ["#tournamentName","#tournamentDescription","#tournamentRegion","#tournamentStart"].forEach(sel => {
+        const el = qs(sel); if (el) el.value = "";
+      });
+
+      closeTournamentModal();
+      await loadTournaments();
+      switchView("tournaments");
+      toast("Tournament created.");
+    } catch (err) {
+      console.error("Create tournament failed:", err);
+      toast(err.message || "Could not create tournament.");
     }
   }
 
@@ -402,7 +561,7 @@
   function bindDetails() {
     qsa(".entity-card.clickable").forEach((card) => {
       card.addEventListener("click", (e) => {
-        if (e.target.closest(".team-report-btn")) return;
+        if (e.target.closest(".team-report-btn") || e.target.closest(".delete-team-btn")) return;
         openDetail(card.dataset.detailType, card.dataset.name, card.dataset.meta);
       });
     });
@@ -415,13 +574,15 @@
     if (createTeamBtn) createTeamBtn.addEventListener("click", openTeamModal);
 
     const createPostBtn = qs("#createPostBtn");
-    if (createPostBtn) createPostBtn.addEventListener("click", () => toast("Create Post is next."));
+    if (createPostBtn) createPostBtn.addEventListener("click", openPostModal);
     const createTournamentBtn = qs("#createTournamentBtn");
-    if (createTournamentBtn) createTournamentBtn.addEventListener("click", () => toast("Create Tournament is next."));
+    if (createTournamentBtn) createTournamentBtn.addEventListener("click", openTournamentModal);
+
     const newPostQuickBtn = qs("#newPostQuickBtn");
-    if (newPostQuickBtn) newPostQuickBtn.addEventListener("click", () => switchView("posts"));
+    if (newPostQuickBtn) newPostQuickBtn.addEventListener("click", openPostModal);
     const joinTournamentQuickBtn = qs("#joinTournamentQuickBtn");
-    if (joinTournamentQuickBtn) joinTournamentQuickBtn.addEventListener("click", () => switchView("tournaments"));
+    if (joinTournamentQuickBtn) joinTournamentQuickBtn.addEventListener("click", switchView.bind(null, "tournaments"));
+
     const openNotificationsBtn = qs("#openNotificationsBtn");
     if (openNotificationsBtn) openNotificationsBtn.addEventListener("click", () => toast("Notifications panel coming soon."));
     const openProfileBtn = qs("#openProfileBtn");
@@ -442,7 +603,7 @@
     qsa(".team-report-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        openReport({ type: "team", id: "team-card" });
+        openReport({ type: "team", id: btn.dataset.id || "team-card" });
       });
     });
 
@@ -468,12 +629,45 @@
     if (closeA) closeA.addEventListener("click", closeTeamModal);
     if (closeB) closeB.addEventListener("click", closeTeamModal);
     if (saveBtn) saveBtn.addEventListener("click", handleCreateTeam);
+
+    const deleteClose = qs("#closeDeleteTeamModal");
+    const deleteCancel = qs("#cancelDeleteTeamBtn");
+    const deleteConfirm = qs("#confirmDeleteTeamBtn");
+    if (deleteClose) deleteClose.addEventListener("click", closeDeleteTeamModal);
+    if (deleteCancel) deleteCancel.addEventListener("click", closeDeleteTeamModal);
+    if (deleteConfirm) deleteConfirm.addEventListener("click", handleDeleteTeam);
+  }
+
+  function bindPostFlow() {
+    const closeA = qs("#closePostModal");
+    const closeB = qs("#cancelPostBtn");
+    const saveBtn = qs("#savePostBtn");
+    if (closeA) closeA.addEventListener("click", closePostModal);
+    if (closeB) closeB.addEventListener("click", closePostModal);
+    if (saveBtn) saveBtn.addEventListener("click", handleCreatePost);
+  }
+
+  function bindTournamentFlow() {
+    const closeA = qs("#closeTournamentModal");
+    const closeB = qs("#cancelTournamentBtn");
+    const saveBtn = qs("#saveTournamentBtn");
+    if (closeA) closeA.addEventListener("click", closeTournamentModal);
+    if (closeB) closeB.addEventListener("click", closeTournamentModal);
+    if (saveBtn) saveBtn.addEventListener("click", handleCreateTournament);
+  }
+
+  function bindDeleteTeamButtons() {
+    qsa(".delete-team-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openDeleteTeamModal(btn.dataset.id, btn.dataset.name);
+      });
+    });
   }
 
   function bindLogout() {
     const logoutBtn = qs("#logoutBtn");
     if (!logoutBtn) return;
-
     logoutBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       try {
@@ -505,6 +699,8 @@
     bindReportFlow();
     bindDetailModal();
     bindTeamFlow();
+    bindPostFlow();
+    bindTournamentFlow();
     bindLogout();
 
     const oauthTouched = await restoreOAuthSessionIfNeeded();
@@ -515,6 +711,8 @@
     }
 
     await loadTeams();
+    await loadPosts();
+    await loadTournaments();
 
     if (state.supabase) {
       state.supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -525,6 +723,8 @@
           setLoggedIn(false);
         }
         await loadTeams();
+        await loadPosts();
+        await loadTournaments();
       });
     }
   }
