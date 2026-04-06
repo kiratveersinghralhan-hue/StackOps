@@ -9,7 +9,6 @@
   const cfg = window.STACKOPS_CONFIG || {};
   const qs = (s, p = document) => p.querySelector(s);
   const qsa = (s, p = document) => Array.from(p.querySelectorAll(s));
-  const toast = (msg) => alert(msg);
 
   function show(el) {
     if (!el) return;
@@ -23,58 +22,8 @@
     el.style.display = "none";
   }
 
-  function setLoggedIn(flag, user = null) {
-    state.loggedIn = flag;
-
-    const guestHome = qs("#guestHome");
-    const appShell = qs("#appShell");
-    const guestActions = qs("#guestActions");
-    const userActions = qs("#userActions");
-
-    if (flag) {
-      hide(guestHome);
-      show(appShell);
-      hide(guestActions);
-      show(userActions);
-
-      if (appShell) {
-        appShell.classList.add("ready");
-        appShell.style.opacity = "1";
-        appShell.style.transform = "none";
-        appShell.style.visibility = "visible";
-      }
-
-      const profileBtn = qs("#openProfileBtn");
-      if (profileBtn && user?.email) profileBtn.textContent = user.email;
-
-      closeAuth();
-    } else {
-      show(guestHome);
-      hide(appShell);
-      show(guestActions);
-      hide(userActions);
-
-      const profileBtn = qs("#openProfileBtn");
-      if (profileBtn) profileBtn.textContent = "My Profile";
-    }
-  }
-
-  function initIntro() {
-    const intro = qs("#introScreen");
-    if (!intro) return;
-
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      intro.classList.add("hide");
-      setTimeout(() => {
-        if (intro.parentNode) intro.parentNode.removeChild(intro);
-      }, 900);
-    };
-
-    window.addEventListener("load", () => setTimeout(finish, 1600), { once: true });
-    setTimeout(finish, 3500);
+  function toast(msg) {
+    alert(msg);
   }
 
   function initSupabase() {
@@ -102,30 +51,71 @@
 
   async function restoreOAuthSessionIfNeeded() {
     if (!state.supabase) return false;
-    let touched = false;
+
+    let touchedUrl = false;
 
     try {
       const url = new URL(window.location.href);
       const hasCode = !!url.searchParams.get("code");
       const hasHashToken = /access_token=/.test(window.location.hash || "");
-      const hasErr = !!url.searchParams.get("error_description");
+      const hasOAuthError = !!url.searchParams.get("error_description");
 
       if (hasCode && state.supabase.auth.exchangeCodeForSession) {
         const { error } = await state.supabase.auth.exchangeCodeForSession(window.location.href);
         if (error) console.error("OAuth exchange failed:", error);
-        touched = true;
+        touchedUrl = true;
       }
 
-      if (hasCode || hasHashToken || hasErr) touched = true;
+      if (hasCode || hasHashToken || hasOAuthError) {
+        touchedUrl = true;
+      }
 
-      if (touched) {
+      if (touchedUrl) {
         window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
       }
     } catch (err) {
       console.error("OAuth restore failed:", err);
     }
 
-    return touched;
+    return touchedUrl;
+  }
+
+  function setLoggedIn(flag, user = null) {
+    state.loggedIn = flag;
+
+    const guestHome = qs("#guestHome");
+    const appShell = qs("#appShell");
+    const guestActions = qs("#guestActions");
+    const userActions = qs("#userActions");
+
+    if (flag) {
+      hide(guestHome);
+      show(appShell);
+      hide(guestActions);
+      show(userActions);
+
+      if (appShell) {
+        appShell.classList.add("ready");
+        appShell.style.opacity = "1";
+        appShell.style.transform = "none";
+        appShell.style.visibility = "visible";
+      }
+
+      if (user?.email) {
+        const profileBtn = qs("#openProfileBtn");
+        if (profileBtn) profileBtn.textContent = user.email;
+      }
+
+      closeAuth();
+    } else {
+      show(guestHome);
+      hide(appShell);
+      show(guestActions);
+      hide(userActions);
+
+      const profileBtn = qs("#openProfileBtn");
+      if (profileBtn) profileBtn.textContent = "My Profile";
+    }
   }
 
   async function syncSession() {
@@ -138,9 +128,11 @@
       const { data, error } = await state.supabase.auth.getSession();
       if (error) throw error;
 
-      const user = data?.session?.user || null;
-      if (user) {
-        setLoggedIn(true, user);
+      const session = data?.session || null;
+
+      if (session?.user) {
+        setLoggedIn(true, session.user);
+        closeAuth();
         return true;
       }
 
@@ -156,12 +148,31 @@
   function openAuth(mode = "signin") {
     state.authMode = mode;
     const title = qs("#authTitle");
-    if (title) title.textContent = mode === "signup" ? "Create account" : "Sign in";
+    if (title) {
+      title.textContent = mode === "signup" ? "Create account" : "Sign in";
+    }
     show(qs("#authModal"));
   }
 
   function closeAuth() {
     hide(qs("#authModal"));
+  }
+
+  function switchView(viewName) {
+    qsa(".rail-item").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.view === viewName);
+    });
+
+    qsa(".view").forEach((view) => {
+      view.classList.remove("active");
+    });
+
+    const panel = qs(`#view-${viewName}`);
+    if (panel) panel.classList.add("active");
+
+    const title = qs("#viewTitle");
+    const activeBtn = qsa(".rail-item").find((btn) => btn.dataset.view === viewName);
+    if (title && activeBtn) title.textContent = activeBtn.textContent.trim();
   }
 
   function openDetail(type, name, meta) {
@@ -189,18 +200,6 @@
     hide(qs("#reportModal"));
   }
 
-  function switchView(viewName) {
-    qsa(".rail-item").forEach((btn) => btn.classList.toggle("active", btn.dataset.view === viewName));
-    qsa(".view").forEach((view) => view.classList.remove("active"));
-
-    const panel = qs(`#view-${viewName}`);
-    if (panel) panel.classList.add("active");
-
-    const title = qs("#viewTitle");
-    const activeBtn = qsa(".rail-item").find((btn) => btn.dataset.view === viewName);
-    if (title && activeBtn) title.textContent = activeBtn.textContent.trim();
-  }
-
   async function fallbackSignin(email, password) {
     const signin = await state.supabase.auth.signInWithPassword({ email, password });
     if (signin.error) throw signin.error;
@@ -212,8 +211,15 @@
     const email = qs("#authEmail")?.value?.trim();
     const password = qs("#authPassword")?.value || "";
 
-    if (!state.supabase) return toast("Supabase is not configured yet. Add real values in config.js.");
-    if (!email || !password) return toast("Enter email and password.");
+    if (!state.supabase) {
+      toast("Supabase is not configured yet. Add real values in config.js.");
+      return;
+    }
+
+    if (!email || !password) {
+      toast("Enter email and password.");
+      return;
+    }
 
     try {
       if (state.authMode === "signup") {
@@ -251,148 +257,30 @@
   }
 
   async function handleGoogleAuth() {
-    if (!cfg.googleEnabled) return toast("Enable Google provider in Supabase, then try again.");
-    if (!state.supabase) return toast("Supabase is not configured yet. Add real values in config.js.");
+    if (!cfg.googleEnabled) {
+      toast("Enable Google provider in Supabase, then try again.");
+      return;
+    }
+
+    if (!state.supabase) {
+      toast("Supabase is not configured yet. Add real values in config.js.");
+      return;
+    }
 
     try {
       closeAuth();
+
       const { error } = await state.supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin }
+        options: {
+          redirectTo: window.location.origin
+        }
       });
+
       if (error) throw error;
     } catch (err) {
       console.error(err);
       toast(err.message || "Google login failed.");
-    }
-  }
-
-  async function submitReport() {
-    const body = qs("#reportBody")?.value?.trim() || "";
-    const payload = {
-      target: state.reportTarget,
-      details: body,
-      createdAt: new Date().toISOString()
-    };
-
-    if (state.supabase) {
-      try {
-        const { data: sessionData } = await state.supabase.auth.getSession();
-        const reporter = sessionData?.session?.user || null;
-
-        const { error } = await state.supabase.from("reports").insert({
-          reporter_id: reporter?.id || null,
-          target_type: payload.target?.type || "unknown",
-          target_id: payload.target?.id || null,
-          reason: body || "manual report",
-          details: JSON.stringify(payload)
-        });
-        if (error) throw error;
-        closeReport();
-        toast("Report submitted.");
-        return;
-      } catch (err) {
-        console.error("Remote report failed, fallback local:", err);
-      }
-    }
-
-    const existing = JSON.parse(localStorage.getItem("stackops_reports") || "[]");
-    existing.push(payload);
-    localStorage.setItem("stackops_reports", JSON.stringify(existing));
-    closeReport();
-    toast("Report saved locally.");
-  }
-
-  function openTeamModal() {
-    show(qs("#teamModal"));
-  }
-
-  function closeTeamModal() {
-    hide(qs("#teamModal"));
-  }
-
-  function renderTeamCard(team) {
-    return `
-      <article class="entity-card clickable"
-        data-detail-type="team"
-        data-name="${team.name || "Team"}"
-        data-meta="${team.status || "Recruiting"} • ${team.region || "Unknown region"} • ${team.rank_target || "Any rank"}">
-        <div>
-          <h4>${team.name || "Unnamed Team"}</h4>
-          <p>${team.description || "No description yet."}</p>
-        </div>
-        <button class="btn ghost small team-report-btn">Report</button>
-      </article>
-    `;
-  }
-
-  async function loadTeams() {
-    const teamsList = qs("#teamsList");
-    if (!teamsList || !state.supabase) return;
-
-    try {
-      const { data, error } = await state.supabase
-        .from("teams")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      if (!data || !data.length) {
-        teamsList.innerHTML = `<div class="panel">No teams yet.</div>`;
-        return;
-      }
-
-      teamsList.innerHTML = data.map(renderTeamCard).join("");
-      bindDetails();
-      bindReportFlow();
-    } catch (err) {
-      console.error("Load teams failed:", err);
-    }
-  }
-
-  async function handleCreateTeam() {
-    if (!state.supabase) return toast("Supabase is not configured yet.");
-
-    const name = qs("#teamName")?.value?.trim();
-    const description = qs("#teamDescription")?.value?.trim() || "";
-    const region = qs("#teamRegion")?.value?.trim() || "";
-    const rankTarget = qs("#teamRankTarget")?.value?.trim() || "";
-
-    if (!name) return toast("Enter team name.");
-
-    try {
-      const { data: sessionData, error: sessionError } = await state.supabase.auth.getSession();
-      if (sessionError) throw sessionError;
-
-      const user = sessionData?.session?.user;
-      if (!user) return toast("Please log in first.");
-
-      const { error } = await state.supabase
-        .from("teams")
-        .insert({
-          created_by: user.id,
-          name,
-          description,
-          region,
-          rank_target: rankTarget,
-          status: "Recruiting"
-        });
-
-      if (error) throw error;
-
-      qs("#teamName").value = "";
-      qs("#teamDescription").value = "";
-      qs("#teamRegion").value = "";
-      qs("#teamRankTarget").value = "";
-
-      closeTeamModal();
-      await loadTeams();
-      switchView("teams");
-      toast("Team created.");
-    } catch (err) {
-      console.error("Create team failed:", err);
-      toast(err.message || "Could not create team.");
     }
   }
 
@@ -412,6 +300,12 @@
 
     const riotBtn = qs("#riotBtn");
     if (riotBtn) riotBtn.addEventListener("click", () => toast("Riot sign-in is coming soon."));
+
+    const notificationsBtn = qs("#openNotificationsBtn");
+    if (notificationsBtn) notificationsBtn.addEventListener("click", () => toast("Notifications panel coming soon."));
+
+    const profileBtn = qs("#openProfileBtn");
+    if (profileBtn) profileBtn.addEventListener("click", () => switchView("settings"));
   }
 
   function bindNav() {
@@ -427,32 +321,36 @@
         openDetail(card.dataset.detailType, card.dataset.name, card.dataset.meta);
       });
     });
+
+    qsa(".detail-trigger").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openDetail(btn.dataset.type, btn.dataset.title, btn.dataset.meta);
+      });
+    });
   }
 
   function bindQuickActions() {
-    const createTeamQuickBtn = qs("#createTeamQuickBtn");
-    if (createTeamQuickBtn) createTeamQuickBtn.addEventListener("click", openTeamModal);
+    const wire = (selector, view, title, meta) => {
+      const btn = qs(selector);
+      if (!btn) return;
 
-    const createTeamBtn = qs("#createTeamBtn");
-    if (createTeamBtn) createTeamBtn.addEventListener("click", openTeamModal);
+      btn.addEventListener("click", () => {
+        if (view) switchView(view);
+        if (title) openDetail("action", title, meta || "");
+      });
+    };
 
-    const createPostBtn = qs("#createPostBtn");
-    if (createPostBtn) createPostBtn.addEventListener("click", () => toast("Create Post is next."));
-
-    const createTournamentBtn = qs("#createTournamentBtn");
-    if (createTournamentBtn) createTournamentBtn.addEventListener("click", () => toast("Create Tournament is next."));
+    wire("#createTeamQuickBtn", "teams", "Create team", "Team creation backend hook can be connected here.");
+    wire("#createTeamBtn", "teams", "Create team", "Team creation backend hook can be connected here.");
+    wire("#createPostBtn", "posts", "Create post", "Post composer backend hook can be connected here.");
+    wire("#createTournamentBtn", "tournaments", "Create tournament", "Tournament creation backend hook can be connected here.");
 
     const newPostQuickBtn = qs("#newPostQuickBtn");
     if (newPostQuickBtn) newPostQuickBtn.addEventListener("click", () => switchView("posts"));
 
     const joinTournamentQuickBtn = qs("#joinTournamentQuickBtn");
     if (joinTournamentQuickBtn) joinTournamentQuickBtn.addEventListener("click", () => switchView("tournaments"));
-
-    const openNotificationsBtn = qs("#openNotificationsBtn");
-    if (openNotificationsBtn) openNotificationsBtn.addEventListener("click", () => toast("Notifications panel coming soon."));
-
-    const openProfileBtn = qs("#openProfileBtn");
-    if (openProfileBtn) openProfileBtn.addEventListener("click", () => switchView("settings"));
   }
 
   function bindReportFlow() {
@@ -464,19 +362,52 @@
     if (openBtn) openBtn.addEventListener("click", () => openReport({ type: "general", id: "manual" }));
     if (closeBtn) closeBtn.addEventListener("click", closeReport);
     if (cancelBtn) cancelBtn.addEventListener("click", closeReport);
-    if (submitBtn) submitBtn.addEventListener("click", submitReport);
 
-    qsa(".team-report-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openReport({ type: "team", id: "team-card" });
+    if (submitBtn) {
+      submitBtn.addEventListener("click", async () => {
+        const body = qs("#reportBody")?.value?.trim() || "";
+        const payload = {
+          target: state.reportTarget,
+          details: body,
+          createdAt: new Date().toISOString()
+        };
+
+        if (state.supabase) {
+          try {
+            const { error } = await state.supabase.from("reports").insert({
+              target_type: payload.target?.type || "unknown",
+              target_id: payload.target?.id || null,
+              reason: body || "manual report",
+              details: JSON.stringify(payload)
+            });
+            if (error) throw error;
+            closeReport();
+            toast("Report submitted.");
+            return;
+          } catch (err) {
+            console.error("Remote report failed, using local fallback:", err);
+          }
+        }
+
+        const existing = JSON.parse(localStorage.getItem("stackops_reports") || "[]");
+        existing.push(payload);
+        localStorage.setItem("stackops_reports", JSON.stringify(existing));
+        closeReport();
+        toast("Report saved locally.");
       });
-    });
+    }
 
     qsa(".tag").forEach((tag) => {
       tag.addEventListener("click", () => {
         const body = qs("#reportBody");
         if (body && !body.value.trim()) body.value = tag.textContent.trim();
+      });
+    });
+
+    qsa(".team-report-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openReport({ type: "team", id: "team-card" });
       });
     });
   }
@@ -488,33 +419,48 @@
     if (closeB) closeB.addEventListener("click", closeDetail);
   }
 
-  function bindTeamFlow() {
-    const closeA = qs("#closeTeamModal");
-    const closeB = qs("#cancelTeamBtn");
-    const saveBtn = qs("#saveTeamBtn");
+  function bindAvatarUpload() {
+    const input = qs("#avatarInput");
+    const preview = qs("#avatarPreview");
+    const genBtn = qs("#generateAvatarBtn");
 
-    if (closeA) closeA.addEventListener("click", closeTeamModal);
-    if (closeB) closeB.addEventListener("click", closeTeamModal);
-    if (saveBtn) saveBtn.addEventListener("click", handleCreateTeam);
+    if (input && preview) {
+      input.addEventListener("change", () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          preview.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    if (genBtn && preview) {
+      genBtn.addEventListener("click", () => {
+        const colors = ["#8fe8ff", "#f0d56f", "#7fd1ff", "#9effc2"];
+        const c = colors[Math.floor(Math.random() * colors.length)];
+        const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><rect width='100%' height='100%' rx='42' fill='#081326'/><circle cx='128' cy='96' r='42' fill='${c}'/><rect x='58' y='154' width='140' height='56' rx='28' fill='${c}' opacity='.9'/></svg>`;
+        preview.src = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+      });
+    }
   }
 
   function bindLogout() {
     const logoutBtn = qs("#logoutBtn");
     if (!logoutBtn) return;
 
-    logoutBtn.addEventListener("click", async (e) => {
-      e.preventDefault();
+    logoutBtn.addEventListener("click", async () => {
       try {
         if (state.supabase) {
-          const { error } = await state.supabase.auth.signOut({ scope: "global" });
+          const { error } = await state.supabase.auth.signOut({ scope: "local" });
           if (error) throw error;
         }
       } catch (err) {
-        console.error("Logout failed:", err);
+        console.error(err);
         toast(err.message || "Logout failed.");
       } finally {
-        try { localStorage.clear(); } catch {}
-        try { sessionStorage.clear(); } catch {}
         setLoggedIn(false);
         closeAuth();
         window.location.href = window.location.origin;
@@ -522,8 +468,26 @@
     });
   }
 
+  function initIntro() {
+    const intro = qs("#introScreen");
+    if (!intro) return;
+
+    let finished = false;
+
+    const hideIntro = () => {
+      if (finished) return;
+      finished = true;
+      intro.classList.add("hide");
+      setTimeout(() => {
+        if (intro.parentNode) intro.parentNode.removeChild(intro);
+      }, 1200);
+    };
+
+    window.addEventListener("load", () => setTimeout(hideIntro, 2100), { once: true });
+    setTimeout(hideIntro, 4200);
+  }
+
   async function init() {
-    initIntro();
     closeAuth();
     initSupabase();
     bindAuthFlow();
@@ -532,29 +496,30 @@
     bindQuickActions();
     bindReportFlow();
     bindDetailModal();
-    bindTeamFlow();
+    bindAvatarUpload();
     bindLogout();
+    initIntro();
 
     const oauthTouched = await restoreOAuthSessionIfNeeded();
     let hasSession = await syncSession();
 
     if (!hasSession && oauthTouched) {
       await new Promise((resolve) => setTimeout(resolve, 700));
-      await syncSession();
+      hasSession = await syncSession();
     }
-
-    await loadTeams();
 
     if (state.supabase) {
       state.supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
           setLoggedIn(true, session.user);
           closeAuth();
-        } else {
-          setLoggedIn(false);
+          return;
         }
-        await loadTeams();
+
+        await syncSession();
       });
+    } else {
+      setLoggedIn(false);
     }
   }
 

@@ -1,1 +1,1 @@
-Create Team feature added. Replace repo-root frontend files with these.
+Team fix bundle: adds Riot Valorant region select and handles missing rank_target column. Run team_fix.sql, then replace frontend files.
