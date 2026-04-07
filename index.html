@@ -135,9 +135,9 @@
             <article class="panel">
               <h4>Quick actions</h4>
               <div class="stack">
-                <button class="btn ghost">Create team</button>
-                <button class="btn ghost">New post</button>
-                <button class="btn ghost">Join tournament</button>
+                <button class="btn ghost" id="createTeamQuickBtn">Create team</button>
+                <button class="btn ghost" id="newPostQuickBtn">New post</button>
+                <button class="btn ghost" id="joinTournamentQuickBtn">Join tournament</button>
               </div>
             </article>
           </div>
@@ -169,7 +169,7 @@
         <div class="view" id="view-teams">
           <div class="list-head">
             <h3>Teams</h3>
-            <button class="btn primary">Create team</button>
+            <button class="btn primary" id="createTeamBtn">Create team</button>
           </div>
           <div class="card-grid" id="teamsList">
             <article class="entity-card clickable" data-detail-type="team" data-name="Pulse Vector" data-meta="Recruiting • Controller needed">
@@ -192,7 +192,7 @@
         <div class="view" id="view-posts">
           <div class="list-head">
             <h3>Community</h3>
-            <button class="btn primary">Create post</button>
+            <button class="btn primary" id="createPostBtn">Create post</button>
           </div>
           <div class="card-grid" id="postsList">
             <article class="entity-card clickable" data-detail-type="post" data-name="Need consistent duo for ranked" data-meta="Posted by NeonArc">
@@ -213,7 +213,7 @@
         <div class="view" id="view-tournaments">
           <div class="list-head">
             <h3>Tournaments</h3>
-            <button class="btn primary">Create tournament</button>
+            <button class="btn primary" id="createTournamentBtn">Create tournament</button>
           </div>
           <div class="card-grid" id="tournamentsList">
             <article class="entity-card clickable" data-detail-type="tournament" data-name="Night Ops Cup" data-meta="Starts Friday • Max 16 teams">
@@ -522,7 +522,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=101"></script>
-  <script src="app.js?v=101"></script>
+  <script src="config.js?v=102"></script>
+  <script src="app.js?v=102"></script>
 </body>
 </html>
