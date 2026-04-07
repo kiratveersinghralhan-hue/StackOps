@@ -1,1 +1,1 @@
-Premium popup/toast fix only. Replace index.html, app.js, and styles.css. This removes browser alert popups and shows premium in-app popups for Team created/deleted and similar messages.
+Premium popup update applied to your current working files. Replace index.html, app.js, styles.css, and config.js.
