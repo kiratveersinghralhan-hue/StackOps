@@ -1,1 +1,1 @@
-Services page + fixed buttons bundle. Run schema.sql first, then replace repo-root frontend files.
+Premium popup/toast fix only. Replace index.html, app.js, and styles.css. This removes browser alert popups and shows premium in-app popups for Team created/deleted and similar messages.

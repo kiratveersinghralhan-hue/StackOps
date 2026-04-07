@@ -260,10 +260,8 @@ button,input,select,textarea{font:inherit}
   .side-rail{grid-template-columns:repeat(2,minmax(160px,1fr))}
 }
 
-.entity-main{display:grid;gap:6px;min-width:0;flex:1}
-.entity-actions-inline{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.premium-surface{margin-bottom:18px}
-.service-rules p{color:var(--muted)}
+
+/* v60 premium popups */
 .premium-modal{
   position:relative;
   background:
@@ -271,7 +269,10 @@ button,input,select,textarea{font:inherit}
     radial-gradient(circle at top right, rgba(246,220,120,.10), transparent 30%),
     linear-gradient(180deg, rgba(8,18,40,.96), rgba(4,10,25,.97));
   border:1px solid rgba(143,232,255,.18);
-  box-shadow:0 18px 60px rgba(0,0,0,.46), inset 0 1px 0 rgba(255,255,255,.05), 0 0 0 1px rgba(255,255,255,.02);
+  box-shadow:
+    0 18px 60px rgba(0,0,0,.46),
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 0 0 1px rgba(255,255,255,.02);
   overflow:hidden;
 }
 .premium-modal::before{
@@ -282,25 +283,117 @@ button,input,select,textarea{font:inherit}
   background:linear-gradient(135deg, rgba(143,232,255,.08), transparent 35%, rgba(246,220,120,.06));
   opacity:.9;
 }
+.premium-modal .eyebrow{
+  letter-spacing:.18em;
+}
 .danger-modal{
   border-color:rgba(255,120,120,.22);
-  box-shadow:0 18px 60px rgba(0,0,0,.50), 0 0 34px rgba(255,110,110,.08), inset 0 1px 0 rgba(255,255,255,.05);
+  box-shadow:
+    0 18px 60px rgba(0,0,0,.50),
+    0 0 34px rgba(255,110,110,.08),
+    inset 0 1px 0 rgba(255,255,255,.05);
 }
-.btn.danger,.delete-team-btn,.delete-post-btn,.delete-tournament-btn,.delete-service-btn{
-  background:linear-gradient(135deg,#ff7a7a 0%,#ffb26a 100%) !important;
+.btn.danger,
+.delete-team-btn{
+  background:linear-gradient(135deg, #ff7a7a 0%, #ffb26a 100%) !important;
   color:#111827 !important;
   border:none !important;
   box-shadow:0 10px 24px rgba(255,120,110,.22);
+}
+.delete-team-btn{
   font-weight:700;
 }
-.btn.danger:hover,.delete-team-btn:hover,.delete-post-btn:hover,.delete-tournament-btn:hover,.delete-service-btn:hover{
+.btn.danger:hover,
+.delete-team-btn:hover{
   transform:translateY(-1px);
   box-shadow:0 14px 28px rgba(255,120,110,.28);
+}
+.modal-head h3{
+  text-shadow:0 2px 18px rgba(255,255,255,.06);
 }
 .subtle-panel{
   border:1px solid rgba(255,255,255,.07);
   border-radius:18px;
   padding:16px 18px;
   background:rgba(255,255,255,.035);
-  color:rgba(255,255,255,.92);
+}
+
+
+.toast-stack{
+  position:fixed;
+  left:50%;
+  bottom:112px;
+  transform:translateX(-50%);
+  width:min(92vw, 760px);
+  display:grid;
+  gap:12px;
+  z-index:1200;
+  pointer-events:none;
+}
+.toast-card{
+  pointer-events:auto;
+  opacity:0;
+  transform:translateY(14px) scale(.985);
+  transition:opacity .22s ease, transform .22s ease;
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:20px;
+  padding:28px 34px;
+  border-radius:28px;
+  color:#f5f7fb;
+  background:
+    radial-gradient(circle at top left, rgba(143,232,255,.08), transparent 30%),
+    radial-gradient(circle at top right, rgba(240,213,111,.06), transparent 28%),
+    rgba(26,26,31,.96);
+  border:1px solid rgba(255,255,255,.08);
+  box-shadow:
+    0 26px 80px rgba(0,0,0,.48),
+    inset 0 1px 0 rgba(255,255,255,.05);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+}
+.toast-card.show{
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+.toast-card.leaving{
+  opacity:0;
+  transform:translateY(8px) scale(.99);
+}
+.toast-copy{
+  font-size:clamp(18px, 2.3vw, 28px);
+  line-height:1.45;
+  font-weight:500;
+  letter-spacing:-0.01em;
+  max-width:80%;
+}
+.toast-close{
+  flex:0 0 auto;
+  background:none;
+  border:none;
+  color:#5d8dff;
+  font-size:clamp(18px, 2vw, 24px);
+  line-height:1;
+  cursor:pointer;
+  padding:8px 0;
+}
+.toast-card.success{
+  border-color:rgba(143,232,255,.12);
+}
+.toast-card.error{
+  border-color:rgba(255,122,122,.18);
+}
+@media (max-width: 640px){
+  .toast-stack{
+    width:min(92vw, 760px);
+    bottom:128px;
+  }
+  .toast-card{
+    padding:24px 22px;
+    border-radius:24px;
+  }
+  .toast-copy{
+    max-width:72%;
+  }
 }
