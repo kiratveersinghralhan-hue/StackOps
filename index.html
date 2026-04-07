@@ -308,8 +308,8 @@
         <h3 id="authTitle">Sign in</h3>
       </div>
       <div class="stack">
-        <input class="field-input" placeholder="Email" />
-        <input class="field-input" placeholder="Password" type="password" />
+        <input id="authEmail" class="field-input" placeholder="Email" type="email" />
+        <input id="authPassword" class="field-input" placeholder="Password" type="password" />
         <button class="btn primary full" id="submitAuthBtn">Continue</button>
         <button class="btn ghost full" id="googleBtn">Continue with Google</button>
         <button class="btn ghost full" id="riotBtn">Connect Riot (coming soon)</button>
@@ -522,7 +522,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=101"></script>
+  <script src="app.js?v=101"></script>
 </body>
 </html>
