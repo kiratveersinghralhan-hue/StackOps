@@ -1,1 +1,1 @@
-First 3 requests implemented: working create buttons, delete buttons for created items, premium create/delete popups. Run schema.sql first.
+Services page + fixed buttons bundle. Run schema.sql first, then replace repo-root frontend files.
