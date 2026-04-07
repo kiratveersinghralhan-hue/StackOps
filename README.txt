@@ -1,1 +1,1 @@
-v60 premium fix bundle. Run schema_fix_v60.sql first, then replace frontend files.
+First 3 requests implemented: working create buttons, delete buttons for created items, premium create/delete popups. Run schema.sql first.

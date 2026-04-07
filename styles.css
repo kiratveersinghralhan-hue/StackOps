@@ -317,3 +317,9 @@ button,input,select,textarea{font:inherit}
   padding:16px 18px;
   background:rgba(255,255,255,.035);
 }
+
+.entity-main{display:grid;gap:6px;min-width:0;flex:1}
+.entity-actions-inline{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn.danger,.delete-team-btn,.delete-post-btn,.delete-tournament-btn{background:linear-gradient(135deg,#ff7a7a 0%,#ffb26a 100%) !important;color:#111827 !important;border:none !important;box-shadow:0 10px 24px rgba(255,120,110,.22);font-weight:700}
+.btn.danger:hover,.delete-team-btn:hover,.delete-post-btn:hover,.delete-tournament-btn:hover{transform:translateY(-1px);box-shadow:0 14px 28px rgba(255,120,110,.28)}
+.subtle-panel{border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:16px 18px;background:rgba(255,255,255,.035);color:rgba(255,255,255,.92)}
