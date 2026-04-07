@@ -98,6 +98,7 @@
         <button class="rail-item" data-view="teams">Teams</button>
         <button class="rail-item" data-view="posts">Community</button>
         <button class="rail-item" data-view="tournaments">Tournaments</button>
+        <button class="rail-item" data-view="services">Services</button>
         <button class="rail-item" data-view="messages">Messages</button>
         <button class="rail-item" data-view="settings">Settings</button>
       </aside>
@@ -134,9 +135,9 @@
             <article class="panel">
               <h4>Quick actions</h4>
               <div class="stack">
-                <button class="btn ghost" id="createTeamQuickBtn">Create team</button>
-                <button class="btn ghost" id="newPostQuickBtn">New post</button>
-                <button class="btn ghost" id="joinTournamentQuickBtn">Join tournament</button>
+                <button class="btn ghost">Create team</button>
+                <button class="btn ghost">New post</button>
+                <button class="btn ghost">Join tournament</button>
               </div>
             </article>
           </div>
@@ -168,9 +169,9 @@
         <div class="view" id="view-teams">
           <div class="list-head">
             <h3>Teams</h3>
-            <button class="btn primary" id="createTeamBtn">Create team</button>
+            <button class="btn primary">Create team</button>
           </div>
-          <div class="card-grid">
+          <div class="card-grid" id="teamsList">
             <article class="entity-card clickable" data-detail-type="team" data-name="Pulse Vector" data-meta="Recruiting • Controller needed">
               <div>
                 <h4>Pulse Vector</h4>
@@ -191,9 +192,9 @@
         <div class="view" id="view-posts">
           <div class="list-head">
             <h3>Community</h3>
-            <button class="btn primary" id="createPostBtn">Create post</button>
+            <button class="btn primary">Create post</button>
           </div>
-          <div class="card-grid">
+          <div class="card-grid" id="postsList">
             <article class="entity-card clickable" data-detail-type="post" data-name="Need consistent duo for ranked" data-meta="Posted by NeonArc">
               <div>
                 <h4>Need consistent duo for ranked</h4>
@@ -212,13 +213,33 @@
         <div class="view" id="view-tournaments">
           <div class="list-head">
             <h3>Tournaments</h3>
-            <button class="btn primary" id="createTournamentBtn">Create tournament</button>
+            <button class="btn primary">Create tournament</button>
           </div>
-          <div class="card-grid">
+          <div class="card-grid" id="tournamentsList">
             <article class="entity-card clickable" data-detail-type="tournament" data-name="Night Ops Cup" data-meta="Starts Friday • Max 16 teams">
               <div>
                 <h4>Night Ops Cup</h4>
                 <p>Starts Friday • Max 16 teams • Prize pool TBD</p>
+              </div>
+            </article>
+          </div>
+        </div>
+
+
+        <div class="view" id="view-services">
+          <div class="list-head">
+            <h3>Coaching & Services</h3>
+            <button class="btn primary" id="createServiceBtn">Create service</button>
+          </div>
+          <div class="panel premium-surface service-rules">
+            <h4>Rules & precautions</h4>
+            <p>No account sharing. No email/password exchange. Use StackOps payments and in-app order flow only. Coaching, VOD review, aim training, duo guidance, and strategy sessions are allowed. Any cheating, boosting, or off-platform payment requests should be reported immediately.</p>
+          </div>
+          <div class="card-grid" id="servicesList">
+            <article class="entity-card clickable" data-detail-type="service" data-name="Immortal Coaching" data-meta="Unverified • AP • 2 hours • ₹999">
+              <div>
+                <h4>Immortal Coaching <span class="badge">Unverified</span></h4>
+                <p>Live coaching, VOD review, crosshair/positioning audit, and ranked guidance.</p>
               </div>
             </article>
           </div>
@@ -287,8 +308,8 @@
         <h3 id="authTitle">Sign in</h3>
       </div>
       <div class="stack">
-        <input class="field-input" id="authEmail" placeholder="Email" type="email" autocomplete="email" />
-<input class="field-input" id="authPassword" placeholder="Password" type="password" autocomplete="current-password" />
+        <input id="authEmail" class="field-input" placeholder="Email" type="email" />
+        <input id="authPassword" class="field-input" placeholder="Password" type="password" />
         <button class="btn primary full" id="submitAuthBtn">Continue</button>
         <button class="btn ghost full" id="googleBtn">Continue with Google</button>
         <button class="btn ghost full" id="riotBtn">Connect Riot (coming soon)</button>
@@ -332,8 +353,176 @@
       </div>
     </div>
   </div>
+
+
+  <div class="modal-backdrop hidden" id="teamModal">
+    <div class="modal glass premium-modal">
+      <button class="icon-close" id="closeTeamModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">TEAM OPS • ELITE</span>
+        <h3>Create team</h3>
+      </div>
+      <div class="stack">
+        <input class="field-input" id="teamName" placeholder="Team name" type="text" />
+        <textarea class="field-input textarea" id="teamDescription" rows="4" placeholder="Team description"></textarea>
+        <select class="field-input" id="teamRegion">
+          <option value="">Select Riot Valorant region</option>
+          <option value="AP">AP</option><option value="BR">BR</option><option value="EU">EU</option>
+          <option value="KR">KR</option><option value="LATAM">LATAM</option><option value="NA">NA</option>
+        </select>
+        <input class="field-input" id="teamRankTarget" placeholder="Target rank" type="text" />
+        <select class="field-input" id="teamRoleNeeded">
+          <option value="">Role needed</option>
+          <option value="Controller">Controller</option><option value="Duelist">Duelist</option>
+          <option value="Initiator">Initiator</option><option value="Sentinel">Sentinel</option>
+          <option value="Flex">Flex</option><option value="IGL">IGL</option><option value="Any">Any</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelTeamBtn" type="button">Cancel</button>
+        <button class="btn primary" id="saveTeamBtn" type="button">Save team</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="deleteTeamModal">
+    <div class="modal glass premium-modal danger-modal">
+      <button class="icon-close" id="closeDeleteTeamModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">TEAM OPS • ELITE</span>
+        <h3>Delete team permanently</h3>
+      </div>
+      <div class="subtle-panel"><p id="deleteTeamText">Are you sure you want to delete this team?</p></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelDeleteTeamBtn" type="button">Cancel</button>
+        <button class="btn danger" id="confirmDeleteTeamBtn" type="button">Delete team</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="postModal">
+    <div class="modal glass premium-modal">
+      <button class="icon-close" id="closePostModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">COMMUNITY • ELITE</span>
+        <h3>Create post</h3>
+      </div>
+      <div class="stack">
+        <input class="field-input" id="postTitle" placeholder="Post title" type="text" />
+        <textarea class="field-input textarea" id="postContent" rows="5" placeholder="Write your post"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelPostBtn" type="button">Cancel</button>
+        <button class="btn primary" id="savePostBtn" type="button">Publish post</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="deletePostModal">
+    <div class="modal glass premium-modal danger-modal">
+      <button class="icon-close" id="closeDeletePostModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">COMMUNITY • ELITE</span>
+        <h3>Delete post permanently</h3>
+      </div>
+      <div class="subtle-panel"><p id="deletePostText">Are you sure you want to delete this post?</p></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelDeletePostBtn" type="button">Cancel</button>
+        <button class="btn danger" id="confirmDeletePostBtn" type="button">Delete post</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="tournamentModal">
+    <div class="modal glass premium-modal">
+      <button class="icon-close" id="closeTournamentModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">TOURNAMENT OPS • ELITE</span>
+        <h3>Create tournament</h3>
+      </div>
+      <div class="stack">
+        <input class="field-input" id="tournamentName" placeholder="Tournament name" type="text" />
+        <textarea class="field-input textarea" id="tournamentDescription" rows="4" placeholder="Tournament description"></textarea>
+        <select class="field-input" id="tournamentRegion">
+          <option value="">Select Riot Valorant region</option>
+          <option value="AP">AP</option><option value="BR">BR</option><option value="EU">EU</option>
+          <option value="KR">KR</option><option value="LATAM">LATAM</option><option value="NA">NA</option>
+        </select>
+        <input class="field-input" id="tournamentStart" type="datetime-local" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelTournamentBtn" type="button">Cancel</button>
+        <button class="btn primary" id="saveTournamentBtn" type="button">Save tournament</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="deleteTournamentModal">
+    <div class="modal glass premium-modal danger-modal">
+      <button class="icon-close" id="closeDeleteTournamentModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">TOURNAMENT OPS • ELITE</span>
+        <h3>Delete tournament permanently</h3>
+      </div>
+      <div class="subtle-panel"><p id="deleteTournamentText">Are you sure you want to delete this tournament?</p></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelDeleteTournamentBtn" type="button">Cancel</button>
+        <button class="btn danger" id="confirmDeleteTournamentBtn" type="button">Delete tournament</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="serviceModal">
+    <div class="modal glass premium-modal">
+      <button class="icon-close" id="closeServiceModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">SERVICES • ELITE</span>
+        <h3>Create service listing</h3>
+      </div>
+      <div class="stack">
+        <input class="field-input" id="serviceTitle" placeholder="Listing title" type="text" />
+        <select class="field-input" id="serviceType">
+          <option value="">Service type</option>
+          <option value="Coaching">Coaching</option>
+          <option value="VOD Review">VOD Review</option>
+          <option value="Aim Training">Aim Training</option>
+          <option value="Duo Guidance">Duo Guidance</option>
+          <option value="Team Strategy">Team Strategy</option>
+        </select>
+        <input class="field-input" id="servicePrice" placeholder="Price (₹)" type="number" min="0" step="1" />
+        <input class="field-input" id="serviceEta" placeholder="Estimated time (e.g. 2 hours)" type="text" />
+        <input class="field-input" id="servicePeakRank" placeholder="Peak rank achieved" type="text" />
+        <select class="field-input" id="serviceRegion">
+          <option value="">Select Riot Valorant region</option>
+          <option value="AP">AP</option><option value="BR">BR</option><option value="EU">EU</option>
+          <option value="KR">KR</option><option value="LATAM">LATAM</option><option value="NA">NA</option>
+        </select>
+        <textarea class="field-input textarea" id="serviceDescription" rows="4" placeholder="Describe your service"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelServiceBtn" type="button">Cancel</button>
+        <button class="btn primary" id="saveServiceBtn" type="button">Create service</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="deleteServiceModal">
+    <div class="modal glass premium-modal danger-modal">
+      <button class="icon-close" id="closeDeleteServiceModal" aria-label="Close">×</button>
+      <div class="modal-head">
+        <span class="eyebrow">SERVICES • ELITE</span>
+        <h3>Delete service permanently</h3>
+      </div>
+      <div class="subtle-panel"><p id="deleteServiceText">Are you sure you want to delete this service?</p></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="cancelDeleteServiceBtn" type="button">Cancel</button>
+        <button class="btn danger" id="confirmDeleteServiceBtn" type="button">Delete service</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=120"></script>
-  <script src="app.js?v=120"></script>
+  <script src="config.js?v=101"></script>
+  <script src="app.js?v=101"></script>
 </body>
 </html>
