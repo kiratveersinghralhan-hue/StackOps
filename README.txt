@@ -1,1 +1,1 @@
-Services page + fixed buttons bundle. Run schema.sql first, then replace repo-root frontend files.
+Run schema.sql first, then replace repo-root index.html, app.js, config.js, styles.css.
