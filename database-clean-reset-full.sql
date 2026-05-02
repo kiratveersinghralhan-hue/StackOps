@@ -1,320 +1,300 @@
--- STACKOPS ARENA PRO FINAL BACKEND RESET
--- SQL REQUIRED: YES
--- WARNING: This deletes existing public StackOps tables/data. Auth users remain.
+-- StackOps GameLobby WOW clean backend reset
+-- SQL REQUIRED: YES for full backend. This deletes old public schema objects.
 
-create extension if not exists "uuid-ossp";
+drop schema if exists public cascade;
+create schema public;
+grant usage on schema public to postgres, anon, authenticated, service_role;
+grant all on schema public to postgres, service_role;
+
 create extension if not exists pgcrypto;
 
--- Drop existing app tables safely
-DROP TABLE IF EXISTS public.messages CASCADE;
-DROP TABLE IF EXISTS public.orders CASCADE;
-DROP TABLE IF EXISTS public.services CASCADE;
-DROP TABLE IF EXISTS public.squads CASCADE;
-DROP TABLE IF EXISTS public.posts CASCADE;
-DROP TABLE IF EXISTS public.friend_requests CASCADE;
-DROP TABLE IF EXISTS public.notifications CASCADE;
-DROP TABLE IF EXISTS public.user_banners CASCADE;
-DROP TABLE IF EXISTS public.plans CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
-
--- Admin emails helper
-CREATE OR REPLACE FUNCTION public.admin_emails()
-RETURNS text[]
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT ARRAY['kiratveersinghralhan@gmail.com','qq299629@gmail.com']::text[];
-$$;
-
-CREATE TABLE public.profiles (
-  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email text,
-  username text UNIQUE,
-  display_name text,
-  gender text,
-  bio text,
-  avatar_url text,
-  selected_banner_url text,
-  riot_id text,
-  region text,
-  language text DEFAULT 'English',
-  main_game text DEFAULT 'Valorant',
-  role text DEFAULT 'user' CHECK (role IN ('user','seller','moderator','admin')),
-  account_status text DEFAULT 'approved' CHECK (account_status IN ('approved','rejected','banned')),
-  seller_status text DEFAULT 'none' CHECK (seller_status IN ('none','pending','approved','rejected','paused')),
-  plan_key text DEFAULT 'free',
-  title text DEFAULT 'Rookie',
-  badge text DEFAULT 'Starter',
-  xp integer DEFAULT 0,
-  level integer DEFAULT 1,
-  coins integer DEFAULT 0,
-  is_verified boolean DEFAULT false,
-  is_banned boolean DEFAULT false,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
+create table public.admin_emails (
+  email text primary key,
+  created_at timestamptz default now()
 );
+insert into public.admin_emails(email) values
+('kiratveersinghralhan@gmail.com'),
+('qq299629@gmail.com')
+on conflict do nothing;
 
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM auth.users u
-    LEFT JOIN public.profiles p ON p.id = u.id
-    WHERE u.id = auth.uid()
-      AND lower(u.email) = ANY(public.admin_emails())
-      AND COALESCE(p.is_banned,false) = false
-  ) OR EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = auth.uid()
-      AND p.role = 'admin'
-      AND p.is_banned = false
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from auth.users u
+    join public.admin_emails a on lower(a.email)=lower(u.email)
+    where u.id = auth.uid()
   );
 $$;
 
-CREATE OR REPLACE FUNCTION public.commission_rate(amount integer)
-RETURNS integer
-LANGUAGE sql
-IMMUTABLE
-AS $$
-  SELECT CASE
-    WHEN amount < 500 THEN 7
-    WHEN amount < 1000 THEN 10
-    WHEN amount < 2000 THEN 15
-    WHEN amount < 3000 THEN 20
-    WHEN amount < 5000 THEN 25
-    ELSE 30
-  END;
-$$;
+create table public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  username text unique,
+  display_name text,
+  gender text,
+  bio text,
+  riot_id text,
+  region text,
+  main_game text default 'Valorant',
+  avatar_url text,
+  selected_banner_url text default 'default-arena-banner',
+  role text default 'user' check (role in ('user','seller','moderator','admin')),
+  account_status text default 'approved' check (account_status in ('approved','pending','rejected','banned')),
+  seller_status text default 'none' check (seller_status in ('none','pending','approved','rejected')),
+  plan_key text default 'free',
+  title text default 'Rookie',
+  badge text default 'Starter',
+  xp int default 0,
+  coins int default 0,
+  is_verified boolean default false,
+  is_banned boolean default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
 
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-begin
-  insert into public.profiles (
-    id,email,username,display_name,role,account_status,title,badge,is_verified,selected_banner_url
-  ) values (
-    new.id,
-    lower(new.email),
-    split_part(new.email,'@',1),
-    split_part(new.email,'@',1),
-    case when lower(new.email) = any(public.admin_emails()) then 'admin' else 'user' end,
-    'approved',
-    case when lower(new.email) = any(public.admin_emails()) then 'Founder 👑' else 'Rookie' end,
-    case when lower(new.email) = any(public.admin_emails()) then '1 of 1 Admin Crown' else 'Starter' end,
-    case when lower(new.email) = any(public.admin_emails()) then true else false end,
-    case when lower(new.email) = any(public.admin_emails()) then 'founder-king-banner' else 'starter-banner' end
-  ) on conflict (id) do update set
-    email = excluded.email,
-    role = case when excluded.email = any(public.admin_emails()) then 'admin' else public.profiles.role end,
-    account_status = 'approved',
-    is_banned = false;
-  return new;
-end;
-$$;
+create table public.user_banners (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  name text not null,
+  image_url text,
+  rarity text default 'common',
+  unlocked_at timestamptz default now()
+);
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
-CREATE TABLE public.plans (
-  plan_key text PRIMARY KEY,
-  name text NOT NULL,
-  price_inr integer NOT NULL,
+create table public.plans (
+  id uuid primary key default gen_random_uuid(),
+  plan_key text unique not null,
+  name text not null,
+  price_inr int not null,
   badge text,
   title text,
-  monthly_squad_invites integer DEFAULT 5,
-  profile_boost integer DEFAULT 0,
-  perks jsonb DEFAULT '[]'::jsonb,
-  created_at timestamptz DEFAULT now()
+  features jsonb default '[]'::jsonb,
+  created_at timestamptz default now()
 );
-ALTER TABLE public.plans ENABLE ROW LEVEL SECURITY;
+insert into public.plans(plan_key,name,price_inr,badge,title,features) values
+('free','Free',0,'Starter','Rookie','["Guest view","Basic profile","Public squads"]'),
+('recruit','Recruit',199,'Recruit Badge','Recruit','["Custom username","Basic banner","Chat access"]'),
+('silver','Silver',499,'Silver Ops','Operator','["Profile glow","Squad boosts","3 banner cards"]'),
+('gold','Gold',999,'Gold Elite','Elite','["Priority matchmaking","Premium badges","Service discount"]'),
+('radiant','Radiant',2499,'Radiant Pro','Radiant','["Creator tools","Featured posts","Premium cards"]'),
+('legend','Legend',5999,'Legend Crown','Legend','["Max boost","VIP support","Elite identity"]');
 
-INSERT INTO public.plans(plan_key,name,price_inr,badge,title,monthly_squad_invites,profile_boost,perks) VALUES
-('free','Free',0,'Starter','Rookie',5,0,'["Guest discovery","Basic profile","Join public squads"]'),
-('bronze','Bronze',199,'Bronze Card','Entry Fragger',15,5,'["Bronze banner","Extra squad requests","Basic marketplace access"]'),
-('silver','Silver',499,'Silver Glow','Rising Pro',30,10,'["Silver profile glow","Priority filters","More uploads"]'),
-('gold','Gold',999,'Gold Identity','Rank Demon',60,20,'["Gold title","Advanced squad finder","Marketplace discounts"]'),
-('diamond','Diamond',2499,'Diamond Elite','Elite Captain',120,35,'["Premium banners","Service boost","VIP matchmaking"]'),
-('legend','Legend',5999,'Legend Crown','Arena Legend',300,60,'["Exclusive card collection","Highest discovery boost","VIP support"]');
-
-CREATE TABLE public.user_banners (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  image_url text,
-  unlock_source text DEFAULT 'level',
-  min_level integer DEFAULT 1,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE public.user_banners ENABLE ROW LEVEL SECURITY;
-
-CREATE TABLE public.squads (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  owner_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  game text DEFAULT 'Valorant',
-  region text DEFAULT 'Global',
-  language text DEFAULT 'English',
-  rank_required text DEFAULT 'Any',
-  playstyle text DEFAULT 'Competitive',
-  max_members integer DEFAULT 5,
+create table public.squads (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid references public.profiles(id) on delete set null,
+  name text not null,
+  game text default 'Valorant',
+  region text,
+  rank_required text,
   description text,
-  is_open boolean DEFAULT true,
-  created_at timestamptz DEFAULT now()
+  status text default 'open' check (status in ('open','closed','archived')),
+  created_at timestamptz default now()
 );
-ALTER TABLE public.squads ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE public.posts (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
+create table public.squad_invites (
+  id uuid primary key default gen_random_uuid(),
+  squad_id uuid references public.squads(id) on delete cascade,
+  sender_id uuid references public.profiles(id) on delete cascade,
+  receiver_id uuid references public.profiles(id) on delete cascade,
+  status text default 'pending' check (status in ('pending','accepted','rejected')),
+  created_at timestamptz default now()
+);
+
+create table public.posts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
   content text,
   image_url text,
-  visibility text DEFAULT 'public' CHECK (visibility IN ('public','followers','private')),
-  likes_count integer DEFAULT 0,
-  created_at timestamptz DEFAULT now()
+  game text default 'Valorant',
+  created_at timestamptz default now()
 );
-ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE public.services (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  owner_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
-  title text NOT NULL,
+create table public.services (
+  id uuid primary key default gen_random_uuid(),
+  seller_id uuid references public.profiles(id) on delete cascade,
+  title text not null,
   description text,
-  game text DEFAULT 'Valorant',
-  category text DEFAULT 'coaching',
-  price_inr integer NOT NULL DEFAULT 0,
-  commission_percent integer GENERATED ALWAYS AS (public.commission_rate(price_inr)) STORED,
-  status text DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','paused')),
-  ai_verification_status text DEFAULT 'pending' CHECK (ai_verification_status IN ('pending','passed','flagged','manual_review')),
-  proof_url text,
-  created_at timestamptz DEFAULT now()
+  game text default 'Valorant',
+  category text default 'coaching',
+  price_inr int not null,
+  status text default 'pending' check (status in ('pending','approved','rejected','paused')),
+  created_at timestamptz default now()
 );
-ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE public.orders (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  buyer_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  seller_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  service_id uuid REFERENCES public.services(id) ON DELETE SET NULL,
-  plan_key text REFERENCES public.plans(plan_key) ON DELETE SET NULL,
-  amount_inr integer NOT NULL,
-  platform_commission_inr integer DEFAULT 0,
-  seller_payout_inr integer DEFAULT 0,
-  status text DEFAULT 'pending' CHECK (status IN ('pending','paid','cancelled','refunded','completed','disputed')),
-  razorpay_order_id text,
-  razorpay_payment_id text,
-  razorpay_signature text,
-  created_at timestamptz DEFAULT now()
+create table public.seller_applications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  pitch text,
+  status text default 'pending' check (status in ('pending','approved','rejected')),
+  created_at timestamptz default now()
 );
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE public.messages (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
-  channel text DEFAULT 'global',
-  receiver_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
-  content text NOT NULL,
-  created_at timestamptz DEFAULT now()
+create table public.payments (
+  id uuid primary key default gen_random_uuid(),
+  buyer_id uuid references public.profiles(id) on delete set null,
+  service_id uuid references public.services(id) on delete set null,
+  plan_key text,
+  amount_inr int not null,
+  commission_inr int default 0,
+  provider text default 'razorpay',
+  provider_payment_id text,
+  status text default 'pending' check (status in ('pending','paid','failed','refunded','completed')),
+  created_at timestamptz default now()
 );
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE public.friend_requests (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  sender_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
-  receiver_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
-  status text DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected','blocked')),
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(sender_id, receiver_id)
+create table public.chat_channels (
+  id uuid primary key default gen_random_uuid(),
+  slug text unique not null,
+  name text not null,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz default now()
 );
-ALTER TABLE public.friend_requests ENABLE ROW LEVEL SECURITY;
+insert into public.chat_channels(slug,name) values
+('global','Global'),('valorant','Valorant'),('lol','League'),('market','Marketplace') on conflict do nothing;
 
-CREATE TABLE public.notifications (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE,
-  type text DEFAULT 'system',
-  title text NOT NULL,
-  body text,
-  is_read boolean DEFAULT false,
-  created_at timestamptz DEFAULT now()
+create table public.messages (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid references public.profiles(id) on delete set null,
+  channel text default 'global',
+  content text not null,
+  created_at timestamptz default now()
 );
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- RLS POLICIES
-CREATE POLICY "profiles public read" ON public.profiles FOR SELECT USING (account_status='approved' OR id=auth.uid() OR public.is_admin());
-CREATE POLICY "profiles self insert" ON public.profiles FOR INSERT WITH CHECK (id=auth.uid() OR public.is_admin());
-CREATE POLICY "profiles self admin update" ON public.profiles FOR UPDATE USING (id=auth.uid() OR public.is_admin()) WITH CHECK (id=auth.uid() OR public.is_admin());
-CREATE POLICY "profiles admin delete" ON public.profiles FOR DELETE USING (public.is_admin());
+create table public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete cascade,
+  type text,
+  content text,
+  is_read boolean default false,
+  created_at timestamptz default now()
+);
 
-CREATE POLICY "plans public read" ON public.plans FOR SELECT USING (true);
-CREATE POLICY "plans admin manage" ON public.plans FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+create table public.admin_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  admin_id uuid references public.profiles(id) on delete set null,
+  action text not null,
+  target_table text,
+  target_id uuid,
+  metadata jsonb default '{}'::jsonb,
+  created_at timestamptz default now()
+);
 
-CREATE POLICY "banners owner read" ON public.user_banners FOR SELECT USING (user_id=auth.uid() OR public.is_admin());
-CREATE POLICY "banners owner insert" ON public.user_banners FOR INSERT WITH CHECK (user_id=auth.uid() OR public.is_admin());
-CREATE POLICY "banners owner update" ON public.user_banners FOR UPDATE USING (user_id=auth.uid() OR public.is_admin()) WITH CHECK (user_id=auth.uid() OR public.is_admin());
+create or replace function public.commission_for(amount int)
+returns int language sql immutable as $$
+  select round(amount * case
+    when amount < 500 then 0.07
+    when amount < 1000 then 0.10
+    when amount < 2000 then 0.15
+    when amount < 3000 then 0.20
+    when amount < 5000 then 0.25
+    else 0.30 end)::int;
+$$;
 
-CREATE POLICY "squads public read" ON public.squads FOR SELECT USING (true);
-CREATE POLICY "squads owner insert" ON public.squads FOR INSERT WITH CHECK (owner_id=auth.uid());
-CREATE POLICY "squads owner admin update" ON public.squads FOR UPDATE USING (owner_id=auth.uid() OR public.is_admin()) WITH CHECK (owner_id=auth.uid() OR public.is_admin());
-CREATE POLICY "squads owner admin delete" ON public.squads FOR DELETE USING (owner_id=auth.uid() OR public.is_admin());
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  insert into public.profiles(id,username,display_name,role,account_status,title,badge,is_verified,selected_banner_url)
+  values(
+    new.id,
+    split_part(new.email,'@',1),
+    split_part(new.email,'@',1),
+    case when exists(select 1 from public.admin_emails where lower(email)=lower(new.email)) then 'admin' else 'user' end,
+    'approved',
+    case when exists(select 1 from public.admin_emails where lower(email)=lower(new.email)) then 'Founder 👑' else 'Rookie' end,
+    case when exists(select 1 from public.admin_emails where lower(email)=lower(new.email)) then '1 of 1 Admin Crown' else 'Starter' end,
+    exists(select 1 from public.admin_emails where lower(email)=lower(new.email)),
+    case when exists(select 1 from public.admin_emails where lower(email)=lower(new.email)) then 'founder-king-banner' else 'default-arena-banner' end
+  ) on conflict(id) do nothing;
+  return new;
+end; $$;
 
-CREATE POLICY "posts public read" ON public.posts FOR SELECT USING (visibility='public' OR user_id=auth.uid() OR public.is_admin());
-CREATE POLICY "posts owner insert" ON public.posts FOR INSERT WITH CHECK (user_id=auth.uid());
-CREATE POLICY "posts owner admin update" ON public.posts FOR UPDATE USING (user_id=auth.uid() OR public.is_admin()) WITH CHECK (user_id=auth.uid() OR public.is_admin());
-CREATE POLICY "posts owner admin delete" ON public.posts FOR DELETE USING (user_id=auth.uid() OR public.is_admin());
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();
 
-CREATE POLICY "services read approved owner admin" ON public.services FOR SELECT USING (status='approved' OR owner_id=auth.uid() OR public.is_admin());
-CREATE POLICY "services seller apply" ON public.services FOR INSERT WITH CHECK (owner_id=auth.uid());
-CREATE POLICY "services owner admin update" ON public.services FOR UPDATE USING (owner_id=auth.uid() OR public.is_admin()) WITH CHECK (owner_id=auth.uid() OR public.is_admin());
-CREATE POLICY "services admin delete" ON public.services FOR DELETE USING (public.is_admin());
+-- make already signed-up admin emails admin
+update public.profiles p set role='admin',account_status='approved',is_verified=true,is_banned=false,title='Founder 👑',badge='1 of 1 Admin Crown',selected_banner_url='founder-king-banner'
+from auth.users u where p.id=u.id and lower(u.email) in (select lower(email) from public.admin_emails);
 
-CREATE POLICY "orders buyer seller admin read" ON public.orders FOR SELECT USING (buyer_id=auth.uid() OR seller_id=auth.uid() OR public.is_admin());
-CREATE POLICY "orders buyer insert" ON public.orders FOR INSERT WITH CHECK (buyer_id=auth.uid() OR public.is_admin());
-CREATE POLICY "orders admin update" ON public.orders FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+alter table public.admin_emails enable row level security;
+alter table public.profiles enable row level security;
+alter table public.user_banners enable row level security;
+alter table public.plans enable row level security;
+alter table public.squads enable row level security;
+alter table public.squad_invites enable row level security;
+alter table public.posts enable row level security;
+alter table public.services enable row level security;
+alter table public.seller_applications enable row level security;
+alter table public.payments enable row level security;
+alter table public.chat_channels enable row level security;
+alter table public.messages enable row level security;
+alter table public.notifications enable row level security;
+alter table public.admin_audit_log enable row level security;
 
-CREATE POLICY "messages channel read" ON public.messages FOR SELECT USING (receiver_id IS NULL OR user_id=auth.uid() OR receiver_id=auth.uid() OR public.is_admin());
-CREATE POLICY "messages send" ON public.messages FOR INSERT WITH CHECK (user_id=auth.uid());
-CREATE POLICY "messages owner admin delete" ON public.messages FOR DELETE USING (user_id=auth.uid() OR public.is_admin());
+create policy "admin emails read" on public.admin_emails for select using (public.is_admin());
+create policy "admin emails manage" on public.admin_emails for all using (public.is_admin()) with check (public.is_admin());
 
-CREATE POLICY "friends own read" ON public.friend_requests FOR SELECT USING (sender_id=auth.uid() OR receiver_id=auth.uid() OR public.is_admin());
-CREATE POLICY "friends send" ON public.friend_requests FOR INSERT WITH CHECK (sender_id=auth.uid());
-CREATE POLICY "friends receiver update" ON public.friend_requests FOR UPDATE USING (receiver_id=auth.uid() OR public.is_admin()) WITH CHECK (receiver_id=auth.uid() OR public.is_admin());
+create policy "profiles read visible" on public.profiles for select using (account_status='approved' or id=auth.uid() or public.is_admin());
+create policy "profiles insert own" on public.profiles for insert with check (id=auth.uid());
+create policy "profiles update own or admin" on public.profiles for update using (id=auth.uid() or public.is_admin()) with check (id=auth.uid() or public.is_admin());
+create policy "profiles delete admin" on public.profiles for delete using (public.is_admin());
 
-CREATE POLICY "notifications own read" ON public.notifications FOR SELECT USING (user_id=auth.uid() OR public.is_admin());
-CREATE POLICY "notifications admin insert" ON public.notifications FOR INSERT WITH CHECK (user_id=auth.uid() OR public.is_admin());
-CREATE POLICY "notifications own update" ON public.notifications FOR UPDATE USING (user_id=auth.uid() OR public.is_admin()) WITH CHECK (user_id=auth.uid() OR public.is_admin());
+create policy "banners own or admin" on public.user_banners for all using (user_id=auth.uid() or public.is_admin()) with check (user_id=auth.uid() or public.is_admin());
+create policy "plans public read" on public.plans for select using (true);
+create policy "plans admin manage" on public.plans for all using (public.is_admin()) with check (public.is_admin());
 
--- Storage buckets
-INSERT INTO storage.buckets (id,name,public) VALUES
-('avatars','avatars',true),
-('banners','banners',true),
-('post-images','post-images',true),
-('service-proof','service-proof',true),
-('chat-files','chat-files',true)
-ON CONFLICT (id) DO NOTHING;
+create policy "squads public read" on public.squads for select using (true);
+create policy "squads owner create" on public.squads for insert with check (owner_id=auth.uid());
+create policy "squads owner admin update" on public.squads for update using (owner_id=auth.uid() or public.is_admin()) with check (owner_id=auth.uid() or public.is_admin());
+create policy "squads owner admin delete" on public.squads for delete using (owner_id=auth.uid() or public.is_admin());
 
-DROP POLICY IF EXISTS "stackops public storage read" ON storage.objects;
-CREATE POLICY "stackops public storage read" ON storage.objects FOR SELECT USING (bucket_id IN ('avatars','banners','post-images','service-proof','chat-files'));
-DROP POLICY IF EXISTS "stackops user upload own folder" ON storage.objects;
-CREATE POLICY "stackops user upload own folder" ON storage.objects FOR INSERT WITH CHECK (auth.uid()::text = (storage.foldername(name))[1] OR public.is_admin());
-DROP POLICY IF EXISTS "stackops user update own folder" ON storage.objects;
-CREATE POLICY "stackops user update own folder" ON storage.objects FOR UPDATE USING (auth.uid()::text = (storage.foldername(name))[1] OR public.is_admin());
-DROP POLICY IF EXISTS "stackops user delete own folder" ON storage.objects;
-CREATE POLICY "stackops user delete own folder" ON storage.objects FOR DELETE USING (auth.uid()::text = (storage.foldername(name))[1] OR public.is_admin());
+create policy "invites related read" on public.squad_invites for select using (sender_id=auth.uid() or receiver_id=auth.uid() or public.is_admin());
+create policy "invites create own" on public.squad_invites for insert with check (sender_id=auth.uid());
+create policy "invites update owner admin" on public.squad_invites for update using (receiver_id=auth.uid() or public.is_admin()) with check (receiver_id=auth.uid() or public.is_admin());
 
--- Make existing admin users admin if already signed up
-UPDATE public.profiles p SET role='admin', account_status='approved', is_verified=true, is_banned=false, title='Founder 👑', badge='1 of 1 Admin Crown', selected_banner_url='founder-king-banner'
-FROM auth.users u
-WHERE p.id=u.id AND lower(u.email)=ANY(public.admin_emails());
+create policy "posts public read" on public.posts for select using (true);
+create policy "posts create own" on public.posts for insert with check (user_id=auth.uid());
+create policy "posts owner admin update" on public.posts for update using (user_id=auth.uid() or public.is_admin()) with check (user_id=auth.uid() or public.is_admin());
+create policy "posts owner admin delete" on public.posts for delete using (user_id=auth.uid() or public.is_admin());
 
--- Realtime helper note: In Supabase dashboard, enable realtime for public.messages if not already enabled.
+create policy "services approved read" on public.services for select using (status='approved' or seller_id=auth.uid() or public.is_admin());
+create policy "services approved seller create" on public.services for insert with check (seller_id=auth.uid() and exists(select 1 from public.profiles where id=auth.uid() and seller_status='approved'));
+create policy "services owner admin update" on public.services for update using (seller_id=auth.uid() or public.is_admin()) with check (seller_id=auth.uid() or public.is_admin());
+create policy "services admin delete" on public.services for delete using (public.is_admin());
+
+create policy "seller app own admin read" on public.seller_applications for select using (user_id=auth.uid() or public.is_admin());
+create policy "seller app create own" on public.seller_applications for insert with check (user_id=auth.uid());
+create policy "seller app admin update" on public.seller_applications for update using (public.is_admin()) with check (public.is_admin());
+
+create policy "payments own admin read" on public.payments for select using (buyer_id=auth.uid() or public.is_admin());
+create policy "payments create own" on public.payments for insert with check (buyer_id=auth.uid());
+create policy "payments admin update" on public.payments for update using (public.is_admin()) with check (public.is_admin());
+
+create policy "channels read" on public.chat_channels for select using (true);
+create policy "channels admin manage" on public.chat_channels for all using (public.is_admin()) with check (public.is_admin());
+create policy "messages read" on public.messages for select using (true);
+create policy "messages create auth" on public.messages for insert with check (sender_id=auth.uid() and auth.uid() is not null);
+create policy "messages owner admin delete" on public.messages for delete using (sender_id=auth.uid() or public.is_admin());
+
+create policy "notifications own read" on public.notifications for select using (user_id=auth.uid() or public.is_admin());
+create policy "notifications own update" on public.notifications for update using (user_id=auth.uid() or public.is_admin()) with check (user_id=auth.uid() or public.is_admin());
+create policy "notifications admin create" on public.notifications for insert with check (public.is_admin());
+create policy "audit admin read" on public.admin_audit_log for select using (public.is_admin());
+create policy "audit admin insert" on public.admin_audit_log for insert with check (public.is_admin());
+
+insert into storage.buckets(id,name,public) values
+('avatars','avatars',true),('banners','banners',true),('posts','posts',true),('service-files','service-files',true)
+on conflict(id) do nothing;
+
+create policy "storage public read" on storage.objects for select using (bucket_id in ('avatars','banners','posts','service-files'));
+create policy "storage user upload" on storage.objects for insert with check (auth.uid()::text=(storage.foldername(name))[1] or public.is_admin());
+create policy "storage user update" on storage.objects for update using (auth.uid()::text=(storage.foldername(name))[1] or public.is_admin());
+create policy "storage user delete" on storage.objects for delete using (auth.uid()::text=(storage.foldername(name))[1] or public.is_admin());
+
+-- Realtime publication. If a table is already added, Supabase may say already member; that is safe to ignore.
+alter publication supabase_realtime add table public.messages;
+alter publication supabase_realtime add table public.chat_channels;
+alter publication supabase_realtime add table public.notifications;
