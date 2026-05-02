@@ -18,3 +18,6 @@ Admins get founder crown and 1-of-1 banner.
 
 ## Files only in one folder
 No subfolders included.
+
+
+Update note: v2 fixes mobile responsiveness and changes the visual direction to a cleaner Valorant/Riot-inspired black-white-red theme. SQL REQUIRED: NO for this CSS/UI-only patch.
