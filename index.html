@@ -1,70 +1,154 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="StackOps - futuristic Riot gamer social hub for squads, friends, teams, posts, tournaments and premium services." />
-  <title>StackOps — Riot Gamer Social Hub</title>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <title>StackOps Nexus — Riot Gamer Network</title>
+  <meta name="description" content="A futuristic Riot-focused gamer network with squads, profiles, services, premium plans, badges, rewards and admin controls." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <canvas id="fxCanvas" aria-hidden="true"></canvas>
-  <div class="aurora one"></div><div class="aurora two"></div><div class="scanline"></div>
+  <canvas id="bg-canvas"></canvas>
+  <div class="noise"></div>
 
-  <div id="boot" class="boot">
-    <div class="boot-card">
-      <div class="sigil"><span></span><span></span><span></span><span></span></div>
-      <h1>STACKOPS</h1><p>Syncing Riot social command layer...</p><div class="bar"><i></i></div>
-    </div>
-  </div>
-
-  <header class="topbar">
-    <button class="brand" data-nav="home" aria-label="StackOps home"><span class="mark">SO</span><span><b>StackOps</b><small>Riot Gamer Hub</small></span></button>
-    <nav class="nav">
-      <button data-nav="home" class="active">Home</button><button data-nav="players">Players</button><button data-nav="squads">Squads</button><button data-nav="feed">Feed</button><button data-nav="events">Events</button><button data-nav="premium">Premium</button>
+  <header class="topbar glass">
+    <button class="brand" data-route="home"><span class="logo">S</span><span>StackOps <b>Nexus</b></span></button>
+    <nav>
+      <button data-route="home">Home</button>
+      <button data-route="discover">Discover</button>
+      <button data-route="services">Services</button>
+      <button data-route="plans">Plans</button>
+      <button data-route="rewards">Rewards</button>
+      <button id="adminNav" class="admin-only hide" data-route="admin">Admin</button>
     </nav>
-    <div class="actions"><button class="btn ghost" id="themeBtn">Pulse</button><button class="btn" id="authBtn">Sign in</button></div>
+    <div class="top-actions">
+      <button id="themeBtn" class="icon-btn">☄</button>
+      <button id="authBtn" class="primary">Login</button>
+      <button id="profileBtn" class="avatar-btn hide" data-route="dashboard"><img id="topAvatar" alt="avatar" /></button>
+    </div>
   </header>
 
   <main>
-    <section id="home" class="page active hero">
-      <div class="hero-copy glass reveal">
-        <p class="eyebrow">VALORANT • RIOT GAMES • SOCIAL MATCHMAKING</p>
-        <h2>Make friends, build squads, invite players, and feel like the main character.</h2>
-        <p class="lead">A futuristic gaming social network mixing Instagram-style profiles, Discord-style squad spaces, instant play invites, tournaments, premium cosmetics and creator services.</p>
-        <div class="cta"><button class="btn big" data-open="inviteModal">Invite to play</button><button class="btn big ghost" data-nav="players">Find teammates</button></div>
-        <div class="stats"><span><b id="statPlayers">0</b> players</span><span><b id="statSquads">0</b> squads</span><span><b>7</b> earning channels</span></div>
+    <section id="home" class="view active hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow">Riot Gamer Social OS</span>
+        <h1>Find your squad. Build your gamer identity. Earn from your skill.</h1>
+        <p>StackOps Nexus combines Valorant-style matchmaking, Instagram-like profiles, Discord-like community energy, premium rewards, coaching services and admin-grade moderation in one futuristic platform.</p>
+        <div class="hero-cta">
+          <button class="primary big" data-open-auth>Launch Profile</button>
+          <button class="ghost big" data-route="services">Explore Coaching</button>
+        </div>
+        <div class="metrics">
+          <div><b id="mUsers">0</b><span>Players</span></div>
+          <div><b id="mServices">0</b><span>Services</span></div>
+          <div><b>15%</b><span>Commission Engine</span></div>
+        </div>
       </div>
-      <div class="command glass reveal delay">
-        <div class="hud-head"><span>LIVE OPS</span><i></i></div>
-        <div class="rank-card"><div><small>Current focus</small><b>Valorant Squad Finder</b></div><strong>APAC</strong></div>
-        <div class="radar"><span></span><span></span><span></span><b></b></div>
-        <ul class="signal"><li>NeonArc needs Duo • Mumbai • Ascendant</li><li>Pulse Vector recruiting Controller</li><li>Night Ops Cup opens this weekend</li></ul>
+      <div class="hero-card glass tilt">
+        <div class="rank-orb">IMM</div>
+        <h3>Instant Squad Radar</h3>
+        <p>Match by game, rank, region, role, mic, vibe and play time.</p>
+        <div class="radar"><span></span><span></span><span></span><i></i></div>
+        <button class="primary full" data-route="discover">Find Players</button>
       </div>
     </section>
 
-    <section id="players" class="page"><div class="section-head"><div><p class="eyebrow">DISCOVER</p><h2>Players</h2></div><button class="btn" data-open="profileModal">Create profile</button></div><div class="toolbar"><input id="playerSearch" placeholder="Search rank, agent, region, language..."/><select id="rankFilter"><option value="">All ranks</option><option>Iron</option><option>Bronze</option><option>Silver</option><option>Gold</option><option>Platinum</option><option>Diamond</option><option>Ascendant</option><option>Immortal</option><option>Radiant</option></select></div><div id="playersGrid" class="grid"></div></section>
+    <section id="dashboard" class="view layout">
+      <aside class="panel glass profile-panel">
+        <div class="cover"></div>
+        <label class="profile-pic upload-zone"><input id="avatarUpload" type="file" accept="image/*" hidden><img id="dashAvatar" alt="profile"><span>Upload</span></label>
+        <h2 id="dashName">Player</h2>
+        <p id="dashTitle" class="title-line">Recruit</p>
+        <div id="badgeStrip" class="badge-strip"></div>
+        <button class="primary full" id="saveProfileBtn">Save Profile</button>
+      </aside>
+      <section class="panel glass wide">
+        <h2>Command Center</h2>
+        <div class="form-grid">
+          <label>Display Name<input id="displayName" placeholder="Your gamer name"></label>
+          <label>Riot ID<input id="riotId" placeholder="Name#TAG"></label>
+          <label>Main Game<select id="mainGame"><option>Valorant</option><option>League of Legends</option><option>Teamfight Tactics</option><option>Wild Rift</option><option>Legends of Runeterra</option></select></label>
+          <label>Rank<input id="rank" placeholder="Gold, Diamond, Immortal..."></label>
+          <label>Region<select id="region"><option>India</option><option>SEA</option><option>EU</option><option>NA</option><option>ME</option></select></label>
+          <label>Role<input id="roleText" placeholder="Duelist / IGL / Coach"></label>
+        </div>
+        <label>Bio<textarea id="bioText" placeholder="Tell squads what makes you special..."></textarea></label>
+        <div class="split-actions">
+          <button class="ghost" id="lookingBtn">Toggle Looking For Squad</button>
+          <button class="primary" id="createPostBtn">Create Status Post</button>
+        </div>
+        <div id="myStatus" class="status-card"></div>
+      </section>
+    </section>
 
-    <section id="squads" class="page"><div class="section-head"><div><p class="eyebrow">TEAM UP</p><h2>Squads</h2></div><button class="btn" data-open="squadModal">Create squad</button></div><div id="squadsGrid" class="grid"></div></section>
+    <section id="discover" class="view">
+      <div class="section-head"><h2>Discover Players</h2><p>Filter gamers and invite them to play.</p></div>
+      <div class="filters glass">
+        <input id="searchPlayers" placeholder="Search name, rank, game, region...">
+        <button id="refreshPlayers" class="primary">Refresh</button>
+      </div>
+      <div id="playersGrid" class="card-grid"></div>
+    </section>
 
-    <section id="feed" class="page"><div class="section-head"><div><p class="eyebrow">COMMUNITY</p><h2>Feed</h2></div><button class="btn" data-open="postModal">New post</button></div><div id="feedList" class="feed-list"></div></section>
+    <section id="services" class="view">
+      <div class="section-head"><h2>Services Marketplace</h2><p>Verification, Valorant coaching, VOD reviews, duo queue support and paid sessions. Platform commission is configurable.</p></div>
+      <div class="service-hero glass">
+        <div><h3>Earn as a coach or creator</h3><p>Users can list services. Admin verifies providers. You earn commission from each booking.</p></div>
+        <button class="primary" id="openServiceForm">List a Service</button>
+      </div>
+      <div id="serviceForm" class="panel glass hide">
+        <h3>Create Service</h3>
+        <div class="form-grid">
+          <label>Service Title<input id="serviceTitle" placeholder="Immortal Valorant Aim Coaching"></label>
+          <label>Category<select id="serviceCategory"><option>Valorant Coaching</option><option>Profile Verification</option><option>VOD Review</option><option>Team Trial</option><option>Custom Graphics</option></select></label>
+          <label>Price ₹<input id="servicePrice" type="number" min="99" placeholder="499"></label>
+          <label>Duration<input id="serviceDuration" placeholder="60 minutes"></label>
+        </div>
+        <label>Description<textarea id="serviceDesc" placeholder="What will buyers get?"></textarea></label>
+        <button class="primary" id="saveServiceBtn">Submit for Admin Approval</button>
+      </div>
+      <div id="servicesGrid" class="card-grid"></div>
+    </section>
 
-    <section id="events" class="page"><div class="section-head"><div><p class="eyebrow">COMPETE</p><h2>Events & tournaments</h2></div><button class="btn" data-open="eventModal">Create event</button></div><div id="eventsGrid" class="grid"></div></section>
+    <section id="plans" class="view">
+      <div class="section-head"><h2>Premium Plans</h2><p>Plans up to ₹10,000 with badges, titles, profile boosts and rewards.</p></div>
+      <div id="plansGrid" class="plans-grid"></div>
+    </section>
 
-    <section id="premium" class="page premium"><div class="section-head"><div><p class="eyebrow">MONETIZATION</p><h2>Earn from StackOps</h2></div></div><div class="money-grid"><article class="glass price"><h3>Free</h3><b>₹0</b><p>Profiles, feed, basic squads, public invites.</p></article><article class="glass price hot"><h3>Elite</h3><b>₹199/mo</b><p>Animated profile, priority squad finder, boosted visibility, premium badges.</p></article><article class="glass price"><h3>Creator / Team</h3><b>₹499/mo</b><p>Team page, recruitment boosts, event tools, sponsor slots.</p></article></div><div class="glass roadmap"><h3>Maximum earning methods</h3><p>Use freemium subscriptions, cosmetic profile themes, boosted posts, team pages, tournament entry fees, coaching listings, affiliate gear links, and sponsorship placements. Start with subscriptions + cosmetics first because they are easiest to ship without ruining user experience.</p></div></section>
+    <section id="rewards" class="view">
+      <div class="section-head"><h2>Badges, Titles & Rewards</h2><p>Gamified identity system for loyal users, verified coaches, champions and founders.</p></div>
+      <div id="rewardsGrid" class="card-grid"></div>
+    </section>
+
+    <section id="admin" class="view">
+      <div class="admin-banner glass"><div class="crown">♛</div><div><h2>ADMIN OVERLORD PANEL</h2><p>Special crown identity, name banner, user control, plan verification and service approvals.</p></div></div>
+      <div class="admin-tabs glass">
+        <button class="tab active" data-admin-tab="users">Users</button>
+        <button class="tab" data-admin-tab="payments">Plan Requests</button>
+        <button class="tab" data-admin-tab="services">Services</button>
+        <button class="tab" data-admin-tab="badges">Badges</button>
+      </div>
+      <div id="adminContent" class="admin-content"></div>
+    </section>
   </main>
 
-  <aside id="sidePanel" class="side-panel glass"><button id="closePanel" class="x">×</button><div id="panelBody"></div></aside>
+  <div id="authModal" class="modal hide">
+    <div class="modal-card glass">
+      <button class="close" id="closeAuth">×</button>
+      <h2>Enter Nexus</h2>
+      <p>Use email magic link/password auth from Supabase.</p>
+      <input id="email" type="email" placeholder="email@example.com">
+      <input id="password" type="password" placeholder="password">
+      <button class="primary full" id="loginBtn">Login</button>
+      <button class="ghost full" id="signupBtn">Create Account</button>
+      <button class="link" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+
   <div id="toast"></div>
-
-  <dialog id="authModal"><form method="dialog" class="modal"><button class="x">×</button><h3>Sign in / Sign up</h3><p>Connect Supabase in config.js. This UI uses Supabase Auth when keys are present.</p><input id="email" type="email" placeholder="Email"><input id="password" type="password" placeholder="Password"><div class="row"><button class="btn" id="signin" type="button">Sign in</button><button class="btn ghost" id="signup" type="button">Sign up</button></div></form></dialog>
-  <dialog id="profileModal"><form method="dialog" class="modal" id="profileForm"><button class="x">×</button><h3>Create gamer profile</h3><input name="username" placeholder="Username" required><input name="rank" placeholder="Rank e.g. Diamond"><input name="main_agent" placeholder="Main agent"><input name="region" placeholder="Region"><input name="language" placeholder="Language"><textarea name="bio" placeholder="Bio / playstyle"></textarea><button class="btn">Save profile</button></form></dialog>
-  <dialog id="squadModal"><form method="dialog" class="modal" id="squadForm"><button class="x">×</button><h3>Create squad</h3><input name="name" placeholder="Squad name" required><input name="game" placeholder="Game e.g. Valorant"><input name="looking_for" placeholder="Looking for e.g. Controller"><textarea name="description" placeholder="Squad rules, timings, goals"></textarea><button class="btn">Create squad</button></form></dialog>
-  <dialog id="postModal"><form method="dialog" class="modal" id="postForm"><button class="x">×</button><h3>New post</h3><input name="title" placeholder="Title" required><textarea name="body" placeholder="Clip, update, LFG request, announcement"></textarea><button class="btn">Publish</button></form></dialog>
-  <dialog id="eventModal"><form method="dialog" class="modal" id="eventForm"><button class="x">×</button><h3>Create event</h3><input name="name" placeholder="Event name" required><input name="date" placeholder="Date / time"><input name="prize" placeholder="Prize / entry fee"><textarea name="description" placeholder="Rules and details"></textarea><button class="btn">Create event</button></form></dialog>
-  <dialog id="inviteModal"><form method="dialog" class="modal" id="inviteForm"><button class="x">×</button><h3>Invite to play</h3><input name="game" placeholder="Game" value="Valorant"><input name="mode" placeholder="Mode e.g. Competitive"><input name="time" placeholder="Time e.g. Tonight 8 PM IST"><textarea name="note" placeholder="Message"></textarea><button class="btn">Send invite</button></form></dialog>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>

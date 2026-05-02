@@ -1,69 +1,117 @@
-STACKOPS RIOT GAMER HUB - ONE MAIN FOLDER VERSION
+STACKOPS NEXUS — ADVANCED RIOT GAMER NETWORK
 
-What is included:
-- index.html
-- styles.css
-- app.js
-- config.js
-- supabase-schema.sql
-- README.txt
+Folder rule followed:
+- ZIP contains ONE main folder only: StackOps_Riot_Gamer_Hub
+- No subfolders inside it
+- All code/assets are flat files
 
-No subfolders are used.
+FILES
+1. index.html
+   Main website UI: futuristic landing, dashboard, discover, services, plans, rewards, admin panel.
+2. styles.css
+   Full responsive animated gamer UI.
+3. app.js
+   Frontend logic + Supabase integration.
+4. config.js
+   Add your Supabase URL and anon key here.
+5. supabase-reset-schema.sql
+   Clean reset SQL + tables + RLS + storage buckets + plans + badges.
+6. README.txt
+   Setup and business notes.
 
-How to run:
-1. Unzip the project.
-2. Open index.html in a browser.
-3. For proper Supabase/Auth testing, use a local server:
-   python -m http.server 8080
-   Then open http://localhost:8080
+SETUP
+1. Create a Supabase project.
+2. Open Supabase SQL Editor.
+3. Run supabase-reset-schema.sql.
+4. Go to Project Settings > API.
+5. Copy Project URL and anon public key into config.js.
+6. Open index.html with VS Code Live Server, or deploy the folder to Netlify/Vercel.
 
-Supabase setup:
-1. Open Supabase dashboard.
-2. Go to SQL Editor.
-3. Paste and run supabase-schema.sql.
-4. Confirm config.js has your Supabase URL and anon key.
-5. Enable Email Auth in Supabase Auth settings.
+MAKE YOURSELF ADMIN
+1. Create an account on the website first.
+2. In Supabase SQL Editor run:
 
-Main features built:
-- Futuristic animated Riot/Valorant gamer landing page
-- Players discovery
-- Gamer profile creation
-- Squad/team creation
-- Social feed posting
-- Tournament/event creation
-- Invite-to-play modal
-- Supabase Auth sign in/sign up
-- Supabase table read/write with demo fallback
-- Premium/earning page
-- Responsive mobile layout
-- Animated canvas particles, radar HUD, boot screen, glass UI
+update public.profiles
+set role='admin', status='approved', title='ADMIN OVERLORD', badge_name='Admin Crown'
+where email='your@email.com';
 
-Recommended MVP scope:
-Start with Valorant only. Your first killer feature should be "Find teammates instantly" with rank, region, language, mic, timing, role and toxicity-safe reporting. After users come, add League of Legends, TFT and other Riot games.
+3. Refresh website.
+4. Admin tab will appear.
 
-Earning methods:
-1. Premium subscription around ₹199/month.
-2. Animated profile themes and badges.
-3. Boosted posts and boosted team recruitment.
-4. Paid tournament entry and prize pool fees.
-5. Creator/team pages at around ₹499/month.
-6. Coaching/service marketplace commission.
-7. Sponsor/ad placements for gaming brands.
+ADMIN FEATURES INCLUDED
+- Special admin name/title: ADMIN OVERLORD
+- Admin Crown badge/banner
+- Approve users
+- Ban users
+- Make another user admin
+- Approve/reject services
+- Verify/reject plan orders
+- Apply plan rewards to users
+- Manage plans/badges directly from Supabase tables
 
-Estimated cost before going live:
-- Domain: ₹800-₹1,500/year.
-- Supabase free tier for MVP, then ₹2,000+/month when scaling.
-- Hosting: free on Vercel/Netlify for MVP, then ₹1,500-₹5,000/month.
-- Storage/CDN for clips/images later: ₹500-₹5,000/month early stage.
-- Email/Auth costs: usually low at MVP.
-- Marketing: minimum ₹5,000-₹25,000/month if you want users fast.
+PLANS INCLUDED
+- Recruit Pass: ₹199
+- Elite Pass: ₹999
+- Immortal Club: ₹2999
+- Radiant Partner: ₹10000
 
-Realistic MVP launch budget:
-₹2,000-₹8,000/month if simple.
-₹15,000-₹50,000/month once you add media uploads, chat, tournaments and active users.
+BADGES/TITLES INCLUDED
+- Admin Crown
+- Verified Coach
+- Radiant Crown
+- Founder
+- Squad Hunter
+- Recruit
 
-Important legal/product notes:
-- Do not claim official Riot ownership unless you have permission.
-- Use wording like "for Riot gamers" or "community hub".
-- Check Riot developer/API policies before using Riot logos, ranked data or official game assets.
-- Add Terms, Privacy Policy, moderation, report/block, and age-safe community rules before public launch.
+SERVICE MARKETPLACE INCLUDED
+Users can list:
+- Valorant coaching
+- Profile verification services
+- VOD review
+- Team trial
+- Custom graphics
+
+Admin approves services. Users book services. Commission is saved in bookings table. Default commission is 15% and can be changed in config.js or service rows.
+
+SUPABASE STORAGE BUCKETS CREATED
+- avatars
+- covers
+- post-media
+- service-media
+
+Uploads are public-read and user-folder protected. Current frontend includes avatar upload. SQL is ready for cover/post/service media uploads too.
+
+IMPORTANT PAYMENT NOTE
+This package creates plan order and booking records, but real money collection needs a payment gateway such as Razorpay, Cashfree, Stripe, or UPI manual verification.
+For India, Razorpay/Cashfree are common choices. Add gateway only after parent/guardian/business guidance if you are under 18.
+
+GO-LIVE COST ESTIMATE
+Minimum MVP:
+- Domain: ₹800-₹1,200/year
+- Supabase free/pro: ₹0-₹2,100/month
+- Hosting: ₹0-₹1,500/month
+- Basic logo/assets: ₹0-₹5,000 one time
+
+Better production start:
+- Supabase Pro: around ₹2,100/month
+- Hosting/CDN: ₹1,000-₹3,000/month
+- Domain/email: ₹1,000-₹3,000/year
+- Payment gateway fees: usually per transaction
+- Moderation/support budget: depends on users
+
+Recommended launch scope:
+1. Valorant only first.
+2. Launch with profiles + find squad + premium plan requests + coaching marketplace.
+3. Add chat/voice later after you have active users.
+4. Focus on safety/moderation before aggressive growth.
+
+LEGAL/BRAND NOTE
+Do not claim official partnership with Riot Games unless you have written permission. Use language like "for Riot game communities" or "Valorant players" and follow Riot brand/API rules.
+
+WHAT TO IMPROVE NEXT
+- Add Razorpay payment integration.
+- Add real chat with Supabase Realtime.
+- Add friends table and accepted connections.
+- Add service reviews/ratings.
+- Add admin analytics dashboard.
+- Add Riot API stats sync if you get API approval.
