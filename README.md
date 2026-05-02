@@ -1,23 +1,13 @@
-# StackOps GameLobby WOW
+# StackOps GameLobby Feature Pack
 
-SQL REQUIRED: YES, if you want the full backend schema cleanly. If your backend is already running and you only want this UI, SQL is optional.
+SQL REQUIRED: YES
 
-## Setup
-1. Open `config.js`.
-2. Add your Supabase URL and anon key.
-3. Add Razorpay test key.
-4. Run `database-clean-reset-full.sql` in Supabase SQL editor for a clean backend.
-5. Enable realtime publication for: `messages`, `chat_channels`, `notifications`.
+Run `database-clean-reset-full.sql` in Supabase SQL editor. This version adds My Account, profile uploads, teams, community posts, direct/group chat structure, voice room UI, scroll-up button, creative Founder admin banner, collectible banners, badges, rewards and titles.
 
-## Admin by email
-Already set:
+Admin emails are already configured in SQL/config:
 - kiratveersinghralhan@gmail.com
 - qq299629@gmail.com
 
-Admins get founder crown and 1-of-1 banner.
+Realtime: enable `messages`, `notifications`, and `chat_channels` in the `supabase_realtime` publication.
 
-## Files only in one folder
-No subfolders included.
-
-
-Update note: v2 fixes mobile responsiveness and changes the visual direction to a cleaner Valorant/Riot-inspired black-white-red theme. SQL REQUIRED: NO for this CSS/UI-only patch.
+Keep all files in this one main folder.

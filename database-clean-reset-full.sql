@@ -216,7 +216,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();
 
 -- make already signed-up admin emails admin
-update public.profiles p set role='admin',account_status='approved',is_verified=true,is_banned=false,title='Founder 👑',badge='1 of 1 Admin Crown',selected_banner_url='founder-king-banner'
+update public.profiles p set role='admin',account_status='approved',is_verified=true,is_banned=false,title='Founder 👑',badge='Admin Crown',selected_banner_url='founder-king-banner'
 from auth.users u where p.id=u.id and lower(u.email) in (select lower(email) from public.admin_emails);
 
 alter table public.admin_emails enable row level security;
