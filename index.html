@@ -2,49 +2,141 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>StackOps Nexus — Gamer Social Lobby</title>
-  <meta name="description" content="StackOps Nexus is a minimalist futuristic gamer social lobby for squads, coaching, rewards, plans and admin-powered community management." />
-  <meta name="theme-color" content="#080912" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StackOps Arena — Riot Gamer Social Lobby</title>
+  <meta name="description" content="StackOps Arena: Riot-style social lobby for squads, coaching, chat, premium profiles and esports services." />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://checkout.razorpay.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script defer src="config.js"></script>
-  <script defer src="app.js"></script>
 </head>
 <body>
-  <div id="intro" class="intro">
-    <div class="intro-grid"></div>
-    <div class="intro-card">
-      <span class="pulse-dot"></span>
-      <b>STACKOPS</b>
-      <small>syncing gamer universe</small>
-      <div class="intro-bar"><i></i></div>
+  <div id="loader" class="loader"><div class="loader-card"><div class="sigil">S</div><h1>StackOps Arena</h1><p>Syncing Riot lobbies...</p><div class="bar"><span></span></div></div></div>
+
+  <div id="languageModal" class="modal lang-modal hidden">
+    <div class="modal-panel compact">
+      <button class="modal-close" data-close="languageModal">×</button>
+      <span class="eyebrow">Worldwide access</span>
+      <h2>Choose your language</h2>
+      <p>StackOps supports global gamer communities. Select a language to start.</p>
+      <select id="languageSelect" class="input"></select>
+      <button class="btn primary full" id="saveLanguageBtn">Enter Arena</button>
     </div>
   </div>
 
+  <div id="toastRoot" class="toast-root"></div>
+
   <header class="topbar">
-    <a class="brand" href="#home" aria-label="StackOps home"><span class="brand-orb">S</span><span><b>StackOps</b><em>Nexus</em></span></a>
+    <a class="brand" href="#home" data-route="home"><span class="brand-mark">S</span><span><b>StackOps</b><small>Arena Pro</small></span></a>
     <nav class="nav">
-      <a href="#lobby">Lobby</a><a href="#squads">Squads</a><a href="#services">Coaching</a><a href="#plans">Plans</a><a href="#rewards">Rewards</a><a href="#admin">Admin</a>
+      <a href="#home" data-route="home">Lobby</a>
+      <a href="#squads" data-route="squads">Squads</a>
+      <a href="#feed" data-route="feed">Feed</a>
+      <a href="#market" data-route="market">Marketplace</a>
+      <a href="#chat" data-route="chat">Chat</a>
+      <a href="#plans" data-route="plans">Plans</a>
+      <a href="#admin" data-route="admin" class="admin-only hidden">Admin</a>
     </nav>
-    <div class="actions"><button id="accountBtn" class="ghost">Login</button><button class="btn small" data-route="squads">Find Squad</button><button id="menuBtn" class="menu">☰</button></div>
+    <div class="top-actions">
+      <button class="icon-btn" id="themeBtn" title="Theme">◐</button>
+      <button class="btn ghost" id="authOpenBtn">Login</button>
+      <button class="btn primary" data-route="plans">Start Earning</button>
+    </div>
   </header>
 
-  <aside id="drawer" class="drawer" aria-hidden="true">
-    <button class="drawer-bg" data-close></button>
-    <section class="drawer-panel">
-      <div class="drawer-head"><a class="brand" href="#home"><span class="brand-orb">S</span><span><b>StackOps</b><em>Nexus</em></span></a><button class="circle" data-close>×</button></div>
-      <div id="drawerAccount" class="drawer-account"></div>
-      <div class="drawer-grid">
-        <a href="#home">Home</a><a href="#lobby">Live Lobby</a><a href="#squads">Squads</a><a href="#feed">Feed</a><a href="#services">Coaching & Services</a><a href="#plans">Plans</a><a href="#rewards">Badges</a><a href="#profile">My Profile</a><a href="#admin">Admin Console</a><a href="#setup">Setup</a>
+  <main id="app">
+    <section class="page active" id="page-home">
+      <div class="hero arena-grid">
+        <div class="hero-copy reveal">
+          <span class="eyebrow pulse-dot">Live Riot Gamer Network</span>
+          <h1>Find squads. Build status. Earn from your esports skill.</h1>
+          <p>StackOps is an all-in-one Valorant/Riot style lobby for teammates, posts, coaching, services, chat, premium profiles and creator monetization.</p>
+          <div class="hero-actions">
+            <button class="btn primary xl" data-route="squads">Find Squad</button>
+            <button class="btn glass xl" data-route="market">Buy / Sell Services</button>
+            <button class="btn subtle xl" data-route="plans">Unlock Elite</button>
+          </div>
+          <div class="trust-strip">
+            <span>Guest view enabled</span><span>Auto-approved users</span><span>Admin-approved sellers</span><span>Razorpay test-ready</span>
+          </div>
+        </div>
+        <div class="hero-lobby reveal delay-1">
+          <div class="lobby-orb"></div>
+          <div class="player-card king-card">
+            <div class="rank-tag">1 OF 1 KING BANNER</div>
+            <div class="avatar crown-avatar">👑</div>
+            <h3>Founder Admin</h3>
+            <p>Exclusive crown identity for site owners</p>
+            <div class="stat-row"><span>Admin Power</span><b>MAX</b></div>
+            <div class="stat-row"><span>Seller Review</span><b>Live</b></div>
+          </div>
+          <div class="mini-card m1"><b id="onlineCounter">1,248</b><span>Players online</span></div>
+          <div class="mini-card m2"><b id="squadCounter">326</b><span>Squads forming</span></div>
+          <div class="mini-card m3"><b id="earningCounter">₹84,920</b><span>Creator payouts</span></div>
+        </div>
       </div>
-      <p class="drawer-note">Minimal, smooth and built for fast gamer interactions.</p>
-    </section>
-  </aside>
 
-  <main id="app" class="app"></main>
-  <button id="quickSquad" class="quick-squad" data-route="squads">⚡ Squad</button>
-  <button id="scrollTop" class="scroll-top">↑</button>
-  <div id="toast" class="toast"></div>
+      <div class="live-ticker reveal delay-2"><span>LIVE</span><div id="tickerTrack"></div></div>
+
+      <section class="section reveal">
+        <div class="section-head"><span class="eyebrow">Quick zones</span><h2>Everything segregated, one ecosystem</h2></div>
+        <div class="feature-grid">
+          <article class="feature-card" data-route="squads"><i>🎯</i><h3>Instant Squad Finder</h3><p>Rank, region, language and playstyle based lobbies.</p></article>
+          <article class="feature-card" data-route="feed"><i>📸</i><h3>Social Feed</h3><p>Post clips, images, achievements and profile flexes.</p></article>
+          <article class="feature-card" data-route="market"><i>🏆</i><h3>Coaching Marketplace</h3><p>Admin-approved sellers with automatic commission logic.</p></article>
+          <article class="feature-card" data-route="chat"><i>💬</i><h3>Realtime Chat</h3><p>Direct chat plus Discord-like channels for squads.</p></article>
+        </div>
+      </section>
+    </section>
+
+    <section class="page" id="page-squads">
+      <div class="page-head"><span class="eyebrow">Squad Ops</span><h2>Find teammates by vibe, rank and region</h2><button class="btn primary" id="openSquadModal">Create Squad</button></div>
+      <div class="filters"><input id="squadSearch" class="input" placeholder="Search Valorant, LoL, TFT, Wild Rift..."/><select id="gameFilter" class="input"><option>All Riot Games</option><option>Valorant</option><option>League of Legends</option><option>TFT</option><option>Wild Rift</option><option>Legends of Runeterra</option></select></div>
+      <div class="cards-grid" id="squadGrid"></div>
+    </section>
+
+    <section class="page" id="page-feed">
+      <div class="page-head"><span class="eyebrow">Social Layer</span><h2>Clips, wins, recruitments and flex posts</h2></div>
+      <div class="composer auth-needed"><textarea id="postText" class="input" placeholder="Share a clutch, invite, rank push, service result..."></textarea><input id="postImage" class="input" type="file" accept="image/*"><button class="btn primary" id="createPostBtn">Post</button></div>
+      <div class="feed-list" id="feedList"></div>
+    </section>
+
+    <section class="page" id="page-market">
+      <div class="page-head"><span class="eyebrow">Verified Marketplace</span><h2>Coaching, services and esports earning</h2><button class="btn primary" id="openServiceModal">Apply to Sell</button></div>
+      <div class="market-hero"><div><h3>Commission Engine</h3><p>Below ₹500 = 7%, ₹500-999 = 10%, ₹1000-1999 = 15%, ₹2000-2999 = 20%, ₹3000-4999 = 25%, ₹5000+ = 30%.</p></div><button class="btn glass" data-route="admin">Admin Verify Sellers</button></div>
+      <div class="cards-grid" id="serviceGrid"></div>
+    </section>
+
+    <section class="page" id="page-chat">
+      <div class="page-head"><span class="eyebrow">Realtime Comms</span><h2>Direct + channel chat</h2></div>
+      <div class="chat-shell">
+        <aside class="channels"><button class="channel active" data-channel="global"># global-lobby</button><button class="channel" data-channel="valorant"># valorant-ranked</button><button class="channel" data-channel="market"># marketplace</button><button class="channel" data-channel="squad"># squad-up</button></aside>
+        <section class="chat-panel"><div id="chatMessages" class="chat-messages"></div><div class="chat-input"><input id="chatInput" class="input" placeholder="Login to send realtime messages..."><button class="btn primary" id="sendChatBtn">Send</button></div></section>
+      </div>
+    </section>
+
+    <section class="page" id="page-plans">
+      <div class="page-head"><span class="eyebrow">Elite Unlocks</span><h2>Plans from ₹0 to ₹5,999</h2></div>
+      <div class="plans-grid" id="plansGrid"></div>
+    </section>
+
+    <section class="page" id="page-admin">
+      <div class="page-head"><span class="eyebrow">Crown Console</span><h2>Admin control center</h2><div class="crown-pill">👑 1 of 1 Founder Access</div></div>
+      <div class="admin-grid">
+        <div class="admin-panel"><h3>Users</h3><div id="adminUsers"></div></div>
+        <div class="admin-panel"><h3>Seller Applications</h3><div id="adminServices"></div></div>
+        <div class="admin-panel"><h3>Orders / Revenue</h3><div id="adminOrders"></div></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="authModal" class="modal hidden"><div class="modal-panel"><button class="modal-close" data-close="authModal">×</button><span class="eyebrow">Enter Arena</span><h2>Login / Sign up</h2><input id="authEmail" class="input" placeholder="Email"><input id="authPassword" class="input" placeholder="Password" type="password"><div class="modal-actions"><button class="btn primary" id="signupBtn">Sign up</button><button class="btn glass" id="loginBtn">Login</button><button class="btn subtle" id="logoutBtn">Logout</button></div><p class="hint">Admin emails: kiratveersinghralhan@gmail.com and qq299629@gmail.com</p></div></div>
+  <div id="squadModal" class="modal hidden"><div class="modal-panel"><button class="modal-close" data-close="squadModal">×</button><h2>Create Squad</h2><input id="sqName" class="input" placeholder="Squad name"><input id="sqGame" class="input" placeholder="Game"><input id="sqRegion" class="input" placeholder="Region"><input id="sqRank" class="input" placeholder="Rank needed"><textarea id="sqDesc" class="input" placeholder="Describe your lobby"></textarea><button id="createSquadBtn" class="btn primary full">Create</button></div></div>
+  <div id="serviceModal" class="modal hidden"><div class="modal-panel"><button class="modal-close" data-close="serviceModal">×</button><h2>Apply to Sell</h2><input id="svcTitle" class="input" placeholder="Service title"><input id="svcGame" class="input" placeholder="Game"><input id="svcPrice" class="input" type="number" placeholder="Price INR"><textarea id="svcDesc" class="input" placeholder="What do you offer?"></textarea><button id="createServiceBtn" class="btn primary full">Submit for Admin Approval</button></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
