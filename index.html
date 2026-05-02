@@ -3,60 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>StackOps Nexus — Gamer Social, Squads & Coaching</title>
-  <meta name="description" content="StackOps Nexus is a minimalist futuristic gamer network for Riot/Valorant players: squads, social profiles, services, coaching, premium plans, admin controls and live counters." />
-  <meta name="theme-color" content="#070812" />
-  <link rel="stylesheet" href="styles.css?v=wow1" />
+  <title>StackOps Nexus — Gamer Social Lobby</title>
+  <meta name="description" content="StackOps Nexus is a minimalist futuristic gamer social lobby for squads, coaching, rewards, plans and admin-powered community management." />
+  <meta name="theme-color" content="#080912" />
+  <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script defer src="https://checkout.razorpay.com/v1/checkout.js"></script>
-  <script defer src="config.js?v=wow1"></script>
-  <script defer src="app.js?v=wow1"></script>
+  <script defer src="config.js"></script>
+  <script defer src="app.js"></script>
 </head>
 <body>
   <div id="intro" class="intro">
-    <div class="intro-orb"></div>
+    <div class="intro-grid"></div>
     <div class="intro-card">
-      <span class="intro-kicker">STACKOPS NEXUS</span>
-      <h1>READY PLAYER?</h1>
-      <div class="intro-loader"><i></i></div>
-      <p>Loading squads • ranks • rewards • creator economy</p>
+      <span class="pulse-dot"></span>
+      <b>STACKOPS</b>
+      <small>syncing gamer universe</small>
+      <div class="intro-bar"><i></i></div>
     </div>
   </div>
 
   <header class="topbar">
-    <a href="#home" class="brand" aria-label="StackOps home">
-      <span class="brand-mark">S</span>
-      <span><b>StackOps</b><em>Nexus</em></span>
-    </a>
+    <a class="brand" href="#home" aria-label="StackOps home"><span class="brand-orb">S</span><span><b>StackOps</b><em>Nexus</em></span></a>
     <nav class="nav">
-      <a href="#home">Home</a><a href="#squads">Squads</a><a href="#feed">Feed</a><a href="#services">Coaching</a><a href="#plans">Plans</a><a href="#leaderboard">Ranks</a><a href="#admin">Admin</a>
+      <a href="#lobby">Lobby</a><a href="#squads">Squads</a><a href="#services">Coaching</a><a href="#plans">Plans</a><a href="#rewards">Rewards</a><a href="#admin">Admin</a>
     </nav>
-    <div class="actions">
-      <button id="accountBtn" class="ghost">Login</button>
-      <button data-route="squads" class="btn small">Find Squad</button>
-      <button id="menuBtn" class="menu" aria-label="Open menu">☰</button>
-    </div>
+    <div class="actions"><button id="accountBtn" class="ghost">Login</button><button class="btn small" data-route="squads">Find Squad</button><button id="menuBtn" class="menu">☰</button></div>
   </header>
 
   <aside id="drawer" class="drawer" aria-hidden="true">
-    <button class="drawer-bg" data-close aria-label="Close"></button>
+    <button class="drawer-bg" data-close></button>
     <section class="drawer-panel">
-      <div class="drawer-head">
-        <a href="#home" class="brand"><span class="brand-mark">S</span><span><b>StackOps</b><em>Nexus</em></span></a>
-        <button class="circle" data-close>×</button>
-      </div>
+      <div class="drawer-head"><a class="brand" href="#home"><span class="brand-orb">S</span><span><b>StackOps</b><em>Nexus</em></span></a><button class="circle" data-close>×</button></div>
       <div id="drawerAccount" class="drawer-account"></div>
       <div class="drawer-grid">
-        <a href="#home">Home</a><a href="#profile">My Profile</a><a href="#squads">Squad Finder</a><a href="#feed">Pulse Feed</a><a href="#services">Coaching Market</a><a href="#messages">Messages</a><a href="#plans">Premium Plans</a><a href="#leaderboard">Leaderboard</a><a href="#admin">Admin Console</a><a href="#settings">Settings</a>
+        <a href="#home">Home</a><a href="#lobby">Live Lobby</a><a href="#squads">Squads</a><a href="#feed">Feed</a><a href="#services">Coaching & Services</a><a href="#plans">Plans</a><a href="#rewards">Badges</a><a href="#profile">My Profile</a><a href="#admin">Admin Console</a><a href="#setup">Setup</a>
       </div>
-      <p class="drawer-note">Minimal UI. Fast motion. Supabase powered.</p>
+      <p class="drawer-note">Minimal, smooth and built for fast gamer interactions.</p>
     </section>
   </aside>
 
   <main id="app" class="app"></main>
-  <button id="quickPost" class="quick-post">＋</button>
+  <button id="quickSquad" class="quick-squad" data-route="squads">⚡ Squad</button>
   <button id="scrollTop" class="scroll-top">↑</button>
   <div id="toast" class="toast"></div>
-  <div id="loadingOverlay" class="loading-overlay"><div><span></span><b id="loadingText">Processing...</b></div></div>
 </body>
 </html>

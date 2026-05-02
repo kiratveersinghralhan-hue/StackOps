@@ -1,30 +1,38 @@
-STACKOPS NEXUS WOW GAMER SOCIAL
+STACKOPS FUNLOBBY PRO
 
 SQL REQUIRED: YES
-Run database-clean-reset-full.sql once in Supabase SQL editor for this version.
+Why: this version changes backend admin logic to email-based admin and includes the full production schema for profiles, squads, invites, services, payments, badges, posts, chat rooms, messages, events, and storage buckets.
 
-Files are in one main folder only. No subfolders.
+IMPORTANT SETUP:
+1. Open database-clean-reset-full.sql.
+2. Replace YOUR_ADMIN_EMAIL@example.com with your real admin email.
+3. Run the full SQL in Supabase SQL Editor.
+4. Open config.js and add:
+   - SUPABASE_URL
+   - SUPABASE_ANON_KEY
+   - ADMIN_EMAILS: ['yourrealemail@gmail.com']
+5. Upload/deploy this folder.
+6. Login with that admin email.
 
-Setup:
-1. Run database-clean-reset-full.sql in Supabase.
-2. Open config.js and paste SUPABASE_URL and SUPABASE_ANON_KEY.
-3. Your UID is already included in config.js and SQL admin update:
-   02cc6cac-0131-43a3-9385-5965ed5f1e85
-4. If your profile row did not exist during SQL reset, sign up/login once, then run:
+Admin is now by EMAIL, not UID.
 
-update public.profiles
-set role='admin', account_status='approved', title='Founder Admin', badge='Admin Crown', is_verified=true
-where id='02cc6cac-0131-43a3-9385-5965ed5f1e85';
+One folder only, no subfolders.
 
 What changed:
-- Complete UI/UX redesign inspired by your Harvester reference: smooth intro, live counters, drawer menu, premium cards.
-- Gamer style, minimalist, fast, not laggy.
-- Admin console: approve/ban/verify users, approve/reject services.
-- Plans up to Rs 10,000 with badges/titles.
-- Coaching/service marketplace with commission tracking.
-- Squad finder, feed, profile editor, uploads, storage buckets.
-- Razorpay-ready demo payment hook.
+- More fun gamer lobby UI/UX
+- Smooth intro animation
+- Live counters
+- Minimal futuristic cards
+- Admin crown identity
+- Admin console: approve/ban/verify users, approve/reject services, verify/reject payments
+- Plans up to Rs 10,000
+- Services/coaching marketplace with commission tracking
+- Squad finder and invite requests
+- Feed posting
+- Badges/titles/rewards
+- Supabase storage buckets: avatars, banners, posts, service-files, clips
 
-Production notes:
-- This is a frontend + Supabase backend prototype. For real money payments, use server-side Razorpay order creation and webhook verification before activating paid plans.
-- Do not expose service role key in frontend.
+Performance notes:
+- No heavy particles library.
+- No huge animation framework.
+- Uses CSS animations and lightweight vanilla JavaScript.
