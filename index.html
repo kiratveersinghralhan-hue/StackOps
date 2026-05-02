@@ -1,16 +1,130 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>StackOps Nexus</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=Orbitron:wght@700;900&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css"></head><body>
-<div id="intro" class="intro"><div class="intro-orb"></div><h1>STACKOPS NEXUS</h1><p>Riot Gamer Social OS initializing...</p><div class="loadbar"><i></i></div></div>
-<canvas id="space"></canvas><div class="fx"></div>
-<header class="top"><button class="brand" data-route="home"><b>⚡ StackOps</b><span>Nexus</span></button><nav><button data-route="home">Home</button><button data-route="discover">Discover</button><button data-route="squads">Squads</button><button data-route="services">Services</button><button data-route="plans">Plans</button><button data-route="rewards">Rewards</button><button id="adminNav" class="hide admin-link" data-route="admin">♛ Admin</button></nav><button id="authOpen" class="primary">Login</button></header>
-<main>
-<section id="home" class="view active hero"><div><span class="pill">Valorant • Riot • Squads • Coaching</span><h1>Make gamers feel legendary.</h1><p>Profiles, friends, squad invites, premium badges, paid coaching, verification and admin control — built for Supabase.</p><button class="primary big" data-route="discover">Find Players</button><button class="ghost big" data-route="services">Earn as Coach</button></div><div class="holo-card"><b>LIVE MATCH RADAR</b><div class="radar"><i></i></div><p>Invite players, approve services, sell premium plans and grow commission revenue.</p></div></section>
-<section id="discover" class="view"><div class="head"><h2>Discover Players</h2><button id="refreshPlayers" class="primary">Refresh</button></div><input id="playerSearch" class="search" placeholder="Search player, rank, Riot ID, region..."><div id="players" class="grid"></div></section>
-<section id="squads" class="view"><div class="head"><h2>Squad Board</h2><button id="newSquad" class="primary">Create Squad</button></div><div id="squadsList" class="grid"></div></section>
-<section id="services" class="view"><div class="head"><h2>Services Marketplace</h2><button id="newService" class="primary">List Service</button></div><p class="muted">Coaching, profile verification, VOD review and creator services. Admin approves services, you earn platform commission.</p><div id="servicesList" class="grid"></div></section>
-<section id="plans" class="view"><div class="head"><h2>Premium Plans</h2></div><div id="plansList" class="plans"></div></section>
-<section id="rewards" class="view"><div class="head"><h2>Badges & Titles</h2></div><div id="badgesList" class="grid"></div></section>
-<section id="profile" class="view"><div class="panel profile"><label class="avatar"><input id="avatarFile" type="file" accept="image/*" hidden><img id="avatarImg"><span>Upload Avatar</span></label><div class="form"><input id="displayName" placeholder="Display name"><input id="riotId" placeholder="Riot ID e.g. Name#TAG"><input id="rank" placeholder="Rank"><select id="region"><option>India</option><option>SEA</option><option>EU</option><option>NA</option><option>ME</option></select><textarea id="bio" placeholder="Bio"></textarea><button id="saveProfile" class="primary">Save Profile</button></div></div></section>
-<section id="admin" class="view"><div class="admin-hero"><div class="crown">♛</div><div><h2>Founder Admin Control Room</h2><p>Approve, reject, ban, verify plans, approve services and manage users.</p></div></div><div class="tabs"><button data-tab="users" class="active">Users</button><button data-tab="services">Services</button><button data-tab="orders">Orders</button></div><div id="adminBox"></div></section>
-</main>
-<div id="modal" class="modal hide"><div class="modal-card"><button id="closeModal" class="x">×</button><h2 id="modalTitle">Login</h2><div id="modalBody"></div></div></div><div id="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StackOps Nexus — Riot Gamer Network</title>
+  <meta name="description" content="Premium gamer social network for Riot players: squads, coaching, plans, rewards, chat, admin tools." />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="intro" class="intro">
+    <div class="intro-card">
+      <div class="brand-mark">S<span>Ξ</span></div>
+      <h1>StackOps Nexus</h1>
+      <p>Entering the Riot gamer grid</p>
+      <div class="loadbar"><i></i></div>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <button class="icon-btn mobile-only" data-action="toggleNav">☰</button>
+    <a class="brand" href="#home" data-route="home"><span class="brand-logo">SΞ</span><span>StackOps</span></a>
+    <nav id="nav" class="nav">
+      <a href="#home" data-route="home" class="active">Home</a>
+      <a href="#squads" data-route="squads">Squads</a>
+      <a href="#services" data-route="services">Coaching</a>
+      <a href="#plans" data-route="plans">Plans</a>
+      <a href="#chat" data-route="chat">Chat</a>
+      <a href="#admin" data-route="admin" class="admin-link hidden">Admin</a>
+    </nav>
+    <div class="top-actions">
+      <button class="ghost" data-action="openAuth">Login</button>
+      <button class="primary" data-action="quickMatch">Find Squad</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="home" class="page active-page">
+      <div class="hero grid-2">
+        <div class="hero-copy reveal">
+          <span class="eyebrow">Riot gaming social hub</span>
+          <h1>Find teammates. Build status. Monetize skills.</h1>
+          <p>Ultra-light premium UI for Valorant and Riot players with squads, coaching, rewards, profile badges, marketplace commissions, and admin moderation.</p>
+          <div class="hero-actions">
+            <button class="primary big" data-action="openAuth">Start your profile</button>
+            <button class="glass big" data-route="services">Explore coaching</button>
+          </div>
+          <div class="metrics">
+            <div><strong id="metricUsers">0</strong><span>Players</span></div>
+            <div><strong id="metricServices">0</strong><span>Services</span></div>
+            <div><strong>15%</strong><span>Commission</span></div>
+          </div>
+        </div>
+        <div class="command-card reveal delay-1">
+          <div class="profile-shell">
+            <div class="rank-orbit"></div>
+            <div class="avatar-xl">👑</div>
+            <h2 id="heroName">Founder Lobby</h2>
+            <p id="heroTitle">Admin Crown • Verified</p>
+            <div class="status-row"><span></span> Live squad matching</div>
+          </div>
+          <div class="mini-feed">
+            <div><b>Instant Queue</b><small>Rank + region based</small></div>
+            <div><b>Coach Market</b><small>Earn with commission</small></div>
+            <div><b>Admin Control</b><small>Approve, ban, verify</small></div>
+          </div>
+        </div>
+      </div>
+      <section class="section">
+        <div class="section-head"><h2>Live Network</h2><button class="ghost" data-action="refreshAll">Refresh</button></div>
+        <div id="feedGrid" class="cards"></div>
+      </section>
+    </section>
+
+    <section id="squads" class="page">
+      <div class="section-head"><div><span class="eyebrow">Squad Finder</span><h2>Match with players fast</h2></div><button class="primary" data-action="openSquadModal">Create Squad</button></div>
+      <div class="filterbar">
+        <select id="rankFilter"><option value="">Any rank</option><option>Iron-Bronze</option><option>Silver-Gold</option><option>Platinum-Diamond</option><option>Ascendant+</option></select>
+        <select id="regionFilter"><option value="">Any region</option><option>Asia</option><option>EU</option><option>NA</option><option>Middle East</option></select>
+        <button class="glass" data-action="quickMatch">Smart Match</button>
+      </div>
+      <div id="squadGrid" class="cards"></div>
+    </section>
+
+    <section id="services" class="page">
+      <div class="section-head"><div><span class="eyebrow">Creator Economy</span><h2>Verified coaching & services</h2></div><button class="primary" data-action="openServiceModal">List Service</button></div>
+      <div class="market-banner">
+        <div><h3>Coach, verify profiles, VOD review, aim training</h3><p>Creators earn. Platform takes commission. Admin approves every service for quality.</p></div>
+        <button class="glass" data-action="openServiceModal">Become a coach</button>
+      </div>
+      <div id="serviceGrid" class="cards"></div>
+    </section>
+
+    <section id="plans" class="page">
+      <div class="section-head"><div><span class="eyebrow">Premium monetization</span><h2>Plans, badges, titles & rewards</h2></div></div>
+      <div id="planGrid" class="pricing"></div>
+    </section>
+
+    <section id="chat" class="page">
+      <div class="section-head"><div><span class="eyebrow">Party Comms</span><h2>Global chat</h2></div></div>
+      <div class="chat-layout">
+        <aside class="chat-side"><b># nexus-lobby</b><small>Realtime if Supabase is configured</small><button class="ghost" data-action="refreshChat">Reload chat</button></aside>
+        <div class="chat-main">
+          <div id="chatMessages" class="messages"></div>
+          <div class="chat-input"><input id="chatInput" placeholder="Type a squad invite..." /><button class="primary" data-action="sendMessage">Send</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="admin" class="page">
+      <div class="admin-hero"><div><span class="crown">👑</span><h2>Founder Admin Control</h2><p>Approve, reject, ban, verify, feature users and services.</p></div><button class="primary" data-action="loadAdmin">Reload Admin Data</button></div>
+      <div class="admin-grid">
+        <div class="panel"><h3>Users</h3><div id="adminUsers" class="admin-list"></div></div>
+        <div class="panel"><h3>Services</h3><div id="adminServices" class="admin-list"></div></div>
+        <div class="panel"><h3>Orders</h3><div id="adminOrders" class="admin-list"></div></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="authModal" class="modal hidden"><div class="modal-card"><button class="close" data-action="closeModals">×</button><h2>Login / Sign up</h2><p class="muted">Use email auth from Supabase.</p><input id="authEmail" type="email" placeholder="Email" /><input id="authPassword" type="password" placeholder="Password" /><div class="row"><button class="primary" data-action="signIn">Login</button><button class="glass" data-action="signUp">Create account</button></div><small id="authNote"></small></div></div>
+  <div id="squadModal" class="modal hidden"><div class="modal-card"><button class="close" data-action="closeModals">×</button><h2>Create squad</h2><input id="squadName" placeholder="Squad name" /><input id="squadRegion" placeholder="Region" /><input id="squadRank" placeholder="Rank requirement" /><textarea id="squadDesc" placeholder="What kind of players do you need?"></textarea><button class="primary full" data-action="createSquad">Create</button></div></div>
+  <div id="serviceModal" class="modal hidden"><div class="modal-card"><button class="close" data-action="closeModals">×</button><h2>List coaching service</h2><input id="serviceTitle" placeholder="Service title" /><input id="servicePrice" type="number" placeholder="Price in INR" /><textarea id="serviceDesc" placeholder="Describe your coaching / verification / VOD review"></textarea><button class="primary full" data-action="createService">Submit for approval</button></div></div>
+  <div id="toast" class="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

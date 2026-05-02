@@ -1,43 +1,242 @@
-const cfg=window.STACKOPS_CONFIG||{};
-const ready=cfg.SUPABASE_URL&&!cfg.SUPABASE_URL.includes('YOUR_')&&cfg.SUPABASE_ANON_KEY&&!cfg.SUPABASE_ANON_KEY.includes('YOUR_');
-const db=ready?window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY):null;
-let user=null, me=null, cache={profiles:[],plans:[],services:[],squads:[],orders:[],badges:[]};
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-const toast=m=>{let t=document.createElement('div');t.textContent=m;$('#toast').appendChild(t);setTimeout(()=>t.remove(),3500)};
-const img=n=>`https://api.dicebear.com/8.x/bottts/svg?seed=${encodeURIComponent(n||'stackops')}`;
-function route(id){$$('.view').forEach(v=>v.classList.remove('active'));$('#'+id).classList.add('active'); if(id==='admin') renderAdmin('users'); scrollTo({top:0,behavior:'smooth'});} 
-$$('[data-route]').forEach(b=>b.onclick=()=>route(b.dataset.route));
-function modal(title,html){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=html;$('#modal').classList.remove('hide')}
-$('#closeModal').onclick=()=>$('#modal').classList.add('hide');
-$('#authOpen').onclick=()=> user?route('profile'):authModal();
-function authModal(){modal('Enter StackOps',`<input id="em" placeholder="Email"><input id="pw" type="password" placeholder="Password"><button class="primary" id="login">Login</button> <button class="ghost" id="signup">Create Account</button>`);$('#login').onclick=login;$('#signup').onclick=signup}
-async function login(){if(!db)return toast('Add Supabase URL and anon key in config.js');let {error}=await db.auth.signInWithPassword({email:$('#em').value,password:$('#pw').value}); if(error)return toast(error.message); $('#modal').classList.add('hide'); await boot();}
-async function signup(){if(!db)return toast('Add Supabase URL and anon key in config.js');let {error}=await db.auth.signUp({email:$('#em').value,password:$('#pw').value}); if(error)return toast(error.message); toast('Account created. Login after email confirmation if enabled.');}
-async function boot(){stars(); if(!db){demo();return} let s=await db.auth.getSession(); user=s.data.session?.user||null; db.auth.onAuthStateChange(()=>boot()); if(user){$('#authOpen').textContent='Profile'; await loadMe();}else{$('#authOpen').textContent='Login';$('#adminNav').classList.add('hide')} await loadAll(); renderAll();}
-async function loadMe(){let {data,error}=await db.from('profiles').select('*').eq('id',user.id).maybeSingle(); if(!data&&!error){await db.from('profiles').insert({id:user.id,username:user.email?.split('@')[0],display_name:user.email?.split('@')[0]}); data=(await db.from('profiles').select('*').eq('id',user.id).single()).data} me=data; $('#adminNav').classList.toggle('hide',me?.role!=='admin'); fillProfile();}
-async function loadAll(){let qs=[db.from('profiles').select('*').order('created_at',{ascending:false}),db.from('plans').select('*').order('price_inr'),db.from('services').select('*,profiles(display_name,avatar_url)').order('created_at',{ascending:false}),db.from('squads').select('*').order('created_at',{ascending:false}),db.from('orders').select('*').order('created_at',{ascending:false}),db.from('badges').select('*')];let r=await Promise.all(qs);['profiles','plans','services','squads','orders','badges'].forEach((k,i)=>cache[k]=r[i].data||[])}
-function renderAll(){renderPlayers();renderPlans();renderServices();renderSquads();renderBadges()}
-function fillProfile(){if(!me)return;$('#displayName').value=me.display_name||'';$('#riotId').value=me.riot_id||'';$('#rank').value=me.rank||'';$('#region').value=me.region||'India';$('#bio').value=me.bio||'';$('#avatarImg').src=me.avatar_url||img(me.id)}
-$('#saveProfile').onclick=async()=>{if(!user)return authModal();let patch={display_name:$('#displayName').value,riot_id:$('#riotId').value,rank:$('#rank').value,region:$('#region').value,bio:$('#bio').value,account_status:me?.account_status==='pending'?'approved':me?.account_status};let {error}=await db.from('profiles').update(patch).eq('id',user.id); if(error)return toast(error.message); toast('Profile saved'); await boot()}
-$('#avatarFile').onchange=async e=>{if(!user)return authModal();let f=e.target.files[0]; if(!f)return;let path=`${user.id}/${Date.now()}-${f.name.replace(/\s/g,'-')}`;let up=await db.storage.from('avatars').upload(path,f,{upsert:true}); if(up.error)return toast(up.error.message);let url=db.storage.from('avatars').getPublicUrl(path).data.publicUrl;await db.from('profiles').update({avatar_url:url}).eq('id',user.id);toast('Avatar uploaded');await boot()}
-function playerCard(p){let admin=p.role==='admin';return `<div class="card"><img class="mini" src="${p.avatar_url||img(p.id)}"><h3>${admin?'♛ ':''}${p.display_name||p.username||'Player'}</h3><p>${p.riot_id||'No Riot ID'} • ${p.rank||'Unranked'} • ${p.region||'Global'}</p><span class="badge">${p.title||p.badge||p.plan_key||'Rookie'}</span><div class="actions"><button class="primary invite" data-id="${p.id}">Invite</button><button class="ghost">Add Friend</button></div></div>`}
-function renderPlayers(){let q=($('#playerSearch')?.value||'').toLowerCase();let arr=cache.profiles.filter(p=>!q||JSON.stringify(p).toLowerCase().includes(q));$('#players').innerHTML=arr.map(playerCard).join('')||'<p class="muted">No players yet.</p>';$$('.invite').forEach(b=>b.onclick=()=>toast('Invite sent / saved for UI. Add realtime table later.'))}
-$('#playerSearch').oninput=renderPlayers;$('#refreshPlayers').onclick=async()=>{if(db){await loadAll();renderPlayers();toast('Players refreshed')}};
-function renderPlans(){let plans=cache.plans.length?cache.plans:demoPlans();$('#plansList').innerHTML=plans.map(p=>`<div class="card"><h3>${p.name}</h3><div class="price">₹${p.price_inr}</div><p>${p.title||p.title_reward||''}</p><span class="badge">${p.badge||'Premium'}</span><button class="primary buy" data-key="${p.plan_key}">Request Plan</button></div>`).join('');$$('.buy').forEach(b=>b.onclick=()=>buyPlan(b.dataset.key))}
-async function buyPlan(key){if(!user)return authModal();let p=(cache.plans.length?cache.plans:demoPlans()).find(x=>x.plan_key===key);let {error}=await db.from('orders').insert({buyer_id:user.id,plan_key:key,amount_inr:p.price_inr,status:'pending',platform_commission_inr:0}); if(error)return toast(error.message);toast('Plan request sent. Admin will verify payment.');}
-function renderServices(){let list=cache.services.filter(s=>s.status==='approved'||me?.role==='admin'||s.owner_id===user?.id);$('#servicesList').innerHTML=list.map(s=>`<div class="card"><h3>${s.title}</h3><p>${s.description||''}</p><div class="price">₹${s.price_inr}</div><p>Commission: ${s.commission_percent||15}% • ${s.status}</p><button class="primary">Book / Request</button></div>`).join('')||'<p class="muted">No services yet. List one.</p>'}
-$('#newService').onclick=()=>{if(!user)return authModal();modal('List Service',`<input id="st" placeholder="Title"><input id="sp" type="number" placeholder="Price ₹"><textarea id="sd" placeholder="Description"></textarea><button id="ss" class="primary">Submit for Approval</button>`);$('#ss').onclick=async()=>{let {error}=await db.from('services').insert({owner_id:user.id,title:$('#st').value,price_inr:+$('#sp').value||499,description:$('#sd').value,status:'pending',commission_percent:cfg.PLATFORM_COMMISSION_PERCENT||15});if(error)return toast(error.message);$('#modal').classList.add('hide');toast('Service sent to admin');await boot()}}
-function renderSquads(){let list=cache.squads;$('#squadsList').innerHTML=list.map(s=>`<div class="card"><h3>${s.name}</h3><p>${s.game||'Valorant'} • ${s.region||'Global'} • ${s.rank_required||'Any rank'}</p><button class="primary">Join / Invite</button></div>`).join('')||'<p class="muted">No squads yet.</p>'}
-$('#newSquad').onclick=()=>{if(!user)return authModal();modal('Create Squad',`<input id="sn" placeholder="Squad name"><input id="sr" placeholder="Rank required"><button id="sc" class="primary">Create</button>`);$('#sc').onclick=async()=>{let {error}=await db.from('squads').insert({owner_id:user.id,name:$('#sn').value,rank_required:$('#sr').value,game:'Valorant'});if(error)return toast(error.message);$('#modal').classList.add('hide');toast('Squad created');await boot()}}
-function renderBadges(){let b=cache.badges.length?cache.badges:demoBadges();$('#badgesList').innerHTML=b.map(x=>`<div class="card"><h3>${x.icon||'◆'} ${x.name}</h3><p>${x.description||x.rarity||'Reward badge'}</p><span class="badge">${x.rarity||'Rare'}</span></div>`).join('')}
-$$('[data-tab]').forEach(b=>b.onclick=()=>renderAdmin(b.dataset.tab));
-function renderAdmin(tab='users'){if(me?.role!=='admin'){$('#adminBox').innerHTML='<p class="muted">Admin only.</p>';return}$$('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));let html='';if(tab==='users')html=cache.profiles.map(p=>`<div class="card row"><div><h3>${p.role==='admin'?'♛ ':''}${p.display_name||p.username}</h3><p>${p.id}<br>${p.account_status} • ${p.role} • ${p.plan_key||'free'}</p></div><div class="actions"><button class="ok" onclick="adminUser('${p.id}','approved')">Approve</button><button class="warn" onclick="makeAdmin('${p.id}')">Admin</button><button class="danger" onclick="adminUser('${p.id}','banned')">Ban</button></div></div>`).join('');if(tab==='services')html=cache.services.map(s=>`<div class="card row"><div><h3>${s.title}</h3><p>₹${s.price_inr} • ${s.status}</p></div><div class="actions"><button class="ok" onclick="serviceStatus('${s.id}','approved')">Approve</button><button class="danger" onclick="serviceStatus('${s.id}','rejected')">Reject</button></div></div>`).join('');if(tab==='orders')html=cache.orders.map(o=>`<div class="card row"><div><h3>${o.plan_key||'Order'}</h3><p>₹${o.amount_inr} • ${o.status} • buyer ${o.buyer_id}</p></div><div class="actions"><button class="ok" onclick="orderStatus('${o.id}','paid','${o.buyer_id}','${o.plan_key}')">Verify</button><button class="danger" onclick="orderStatus('${o.id}','cancelled')">Reject</button></div></div>`).join('');$('#adminBox').innerHTML=html||'<p class="muted">Nothing here.</p>'}
-window.adminUser=async(id,status)=>{await db.from('profiles').update({account_status:status,is_banned:status==='banned'}).eq('id',id);toast('User updated');await boot();renderAdmin('users')}
-window.makeAdmin=async id=>{await db.from('profiles').update({role:'admin',title:'Founder Admin',badge:'Admin Crown',account_status:'approved',is_verified:true}).eq('id',id);toast('Admin crown granted');await boot();renderAdmin('users')}
-window.serviceStatus=async(id,status)=>{await db.from('services').update({status}).eq('id',id);toast('Service updated');await boot();renderAdmin('services')}
-window.orderStatus=async(id,status,buyer,plan)=>{await db.from('orders').update({status}).eq('id',id); if(status==='paid'&&buyer&&plan){let p=cache.plans.find(x=>x.plan_key===plan);await db.from('profiles').update({plan_key:plan,title:p?.title,badge:p?.badge}).eq('id',buyer)}toast('Order updated');await boot();renderAdmin('orders')}
-function demoPlans(){return[{plan_key:'free',name:'Free',price_inr:0,badge:'Starter',title:'Rookie'},{plan_key:'silver',name:'Silver',price_inr:499,badge:'Silver Badge',title:'Rising Gamer'},{plan_key:'gold',name:'Gold',price_inr:1499,badge:'Gold Badge',title:'Elite Player'},{plan_key:'diamond',name:'Diamond',price_inr:4999,badge:'Diamond Badge',title:'Pro Grinder'},{plan_key:'legend',name:'Legend',price_inr:10000,badge:'Crown Badge',title:'StackOps Legend'}]}
-function demoBadges(){return[{icon:'♛',name:'Admin Crown',rarity:'Mythic',description:'Special admin name banner and crown.'},{icon:'◆',name:'Verified Coach',rarity:'Epic'},{icon:'⚡',name:'Squad Hunter',rarity:'Rare'},{icon:'✦',name:'Founder',rarity:'Legendary'}]}
-function demo(){cache.profiles=[{id:'1',display_name:'RadiantRex',riot_id:'Rex#999',rank:'Radiant',region:'India',title:'Founder',role:'admin'},{id:'2',display_name:'SageQueen',riot_id:'Heal#SEA',rank:'Immortal',region:'SEA'}];cache.plans=demoPlans();cache.badges=demoBadges();cache.services=[{title:'Valorant Aim Coaching',description:'1 hour aim + crosshair placement session',price_inr:499,status:'approved',commission_percent:15}];cache.squads=[{name:'Night Queue Hunters',rank_required:'Gold+',region:'India'}];renderAll();toast('Demo mode. Add Supabase keys in config.js for real backend.')}
-function stars(){let c=$('#space'),x=c.getContext('2d'),w,h,pts=[];function size(){w=c.width=innerWidth;h=c.height=innerHeight;pts=Array.from({length:90},()=>({x:Math.random()*w,y:Math.random()*h,z:Math.random()*2+0.4}))}size();addEventListener('resize',size);(function loop(){x.clearRect(0,0,w,h);x.fillStyle='#ffffff88';pts.forEach(p=>{p.y+=p.z;if(p.y>h)p.y=0;x.beginPath();x.arc(p.x,p.y,p.z,0,7);x.fill()});requestAnimationFrame(loop)})()}
-boot();
+const cfg = window.STACKOPS_CONFIG || {};
+const hasSupabase = cfg.SUPABASE_URL && cfg.SUPABASE_URL !== 'YOUR_SUPABASE_URL' && cfg.SUPABASE_ANON_KEY && cfg.SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+const sb = hasSupabase ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+let currentUser = null;
+let profile = null;
+
+const demo = {
+  profiles: [
+    {id:'demo1', username:'astra.admin', display_name:'Founder Admin', title:'Founder 👑', badge:'Admin Crown', role:'admin', account_status:'approved', is_verified:true},
+    {id:'demo2', username:'jettdash', display_name:'JettDash', title:'Radiant Entry', badge:'Diamond Badge', role:'user', account_status:'approved', is_verified:true},
+    {id:'demo3', username:'sageflow', display_name:'SageFlow', title:'Clutch Mentor', badge:'Gold Badge', role:'user', account_status:'pending', is_verified:false}
+  ],
+  squads: [
+    {id:'s1', name:'Mumbai Night Queue', game:'Valorant', region:'Asia', rank_required:'Silver-Gold', description:'Chill comms, no toxicity, comp grind.'},
+    {id:'s2', name:'Ascendant Aim Lab', game:'Valorant', region:'Asia', rank_required:'Ascendant+', description:'Serious team for scrims and VOD review.'},
+    {id:'s3', name:'Swiftplay Socials', game:'Valorant', region:'EU', rank_required:'Any rank', description:'Make friends, clips, casual games.'}
+  ],
+  services: [
+    {id:'v1', title:'Valorant VOD Review', description:'Detailed round-by-round review, mistakes and drills.', price_inr:799, status:'approved', category:'coaching'},
+    {id:'v2', title:'Aim + Crosshair Coaching', description:'One hour custom routine and sensitivity check.', price_inr:499, status:'approved', category:'coaching'},
+    {id:'v3', title:'Profile Verification Help', description:'Help creators set up verified profile and media kit.', price_inr:999, status:'pending', category:'verification'}
+  ],
+  orders: [
+    {id:'o1', amount_inr:4999, status:'paid', plan_key:'diamond', platform_commission_inr:750},
+    {id:'o2', amount_inr:799, status:'pending', plan_key:null, platform_commission_inr:120}
+  ],
+  plans: [
+    {plan_key:'free', name:'Free', price_inr:0, badge:'Starter', title:'Rookie', perks:['Basic profile','Join squads','Public feed']},
+    {plan_key:'silver', name:'Silver', price_inr:499, badge:'Silver Badge', title:'Rising Gamer', perks:['Silver badge','More invites','Profile theme']},
+    {plan_key:'gold', name:'Gold', price_inr:1499, badge:'Gold Badge', title:'Elite Player', perks:['Animated title','Discovery boost','Service listing']},
+    {plan_key:'diamond', name:'Diamond', price_inr:4999, badge:'Diamond Badge', title:'Pro Grinder', perks:['Premium profile','Featured listing','Priority matchmaking']},
+    {plan_key:'legend', name:'Legend', price_inr:10000, badge:'Crown Badge', title:'StackOps Legend', perks:['Crown badge','Top boost','VIP support','Founder wall']}
+  ],
+  messages: [
+    {id:'m1', content:'Need 2 for comp. Gold/Plat Asia.', sender_name:'JettDash'},
+    {id:'m2', content:'Coach available for VOD review today.', sender_name:'SageFlow'}
+  ]
+};
+
+const $ = (q) => document.querySelector(q);
+const $$ = (q) => Array.from(document.querySelectorAll(q));
+const toast = (msg) => { const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); };
+const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+const safe = (v) => String(v ?? '').replace(/[&<>"]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]));
+
+window.addEventListener('load', async () => {
+  setTimeout(() => $('#intro')?.classList.add('done'), 1250);
+  bindActions();
+  route(location.hash.replace('#','') || 'home');
+  await init();
+});
+window.addEventListener('hashchange', () => route(location.hash.replace('#','') || 'home'));
+
+function bindActions(){
+  document.body.addEventListener('click', async (e) => {
+    const el = e.target.closest('[data-action],[data-route]');
+    if(!el) return;
+    if(el.dataset.route){ route(el.dataset.route); location.hash = el.dataset.route; return; }
+    const a = el.dataset.action;
+    if(a === 'toggleNav') $('#nav').classList.toggle('open');
+    if(a === 'openAuth') openModal('authModal');
+    if(a === 'closeModals') closeModals();
+    if(a === 'signIn') signIn();
+    if(a === 'signUp') signUp();
+    if(a === 'refreshAll') loadAll();
+    if(a === 'quickMatch') quickMatch();
+    if(a === 'openSquadModal') requireLogin(()=>openModal('squadModal'));
+    if(a === 'openServiceModal') requireLogin(()=>openModal('serviceModal'));
+    if(a === 'createSquad') createSquad();
+    if(a === 'createService') createService();
+    if(a === 'sendMessage') sendMessage();
+    if(a === 'refreshChat') loadChat();
+    if(a === 'loadAdmin') loadAdmin();
+    if(a === 'buyPlan') buyPlan(el.dataset.plan, Number(el.dataset.price));
+    if(a === 'bookService') bookService(el.dataset.id, Number(el.dataset.price));
+    if(a === 'adminUser') adminUser(el.dataset.id, el.dataset.op);
+    if(a === 'adminService') adminService(el.dataset.id, el.dataset.op);
+  });
+}
+function route(name){
+  $$('.page').forEach(p=>p.classList.remove('active-page'));
+  $(`#${name}`)?.classList.add('active-page');
+  $$('.nav a').forEach(a=>a.classList.toggle('active', a.dataset.route === name));
+  if(name === 'admin') loadAdmin();
+  if(name === 'chat') loadChat();
+}
+function openModal(id){ $(`#${id}`)?.classList.remove('hidden'); }
+function closeModals(){ $$('.modal').forEach(m=>m.classList.add('hidden')); }
+function requireLogin(fn){ if(!currentUser){ toast('Login first to use this.'); openModal('authModal'); return; } fn(); }
+
+async function init(){
+  if(sb){
+    const {data} = await sb.auth.getUser(); currentUser = data?.user || null;
+    if(currentUser) await loadProfile();
+    sb.auth.onAuthStateChange(async (_evt, session)=>{ currentUser = session?.user || null; if(currentUser) await loadProfile(); updateAuthUI(); loadAll(); });
+  }
+  updateAuthUI();
+  await loadAll();
+}
+async function loadProfile(){
+  if(!sb || !currentUser) return;
+  let {data} = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+  profile = data;
+  if(profile?.role === 'admin') $('.admin-link')?.classList.remove('hidden');
+  $('#heroName').textContent = profile?.display_name || profile?.username || 'Founder Lobby';
+  $('#heroTitle').textContent = `${profile?.title || 'Rookie'} • ${profile?.badge || 'Starter'}`;
+}
+function updateAuthUI(){
+  const btn = $('.top-actions .ghost');
+  if(!btn) return;
+  btn.textContent = currentUser ? 'Logout' : 'Login';
+  btn.dataset.action = currentUser ? 'logout' : 'openAuth';
+  if(currentUser){ btn.onclick = async()=>{ await sb.auth.signOut(); currentUser=null; profile=null; location.hash='home'; toast('Logged out'); }; }
+}
+async function signIn(){
+  if(!sb) return toast('Add Supabase URL + anon key in config.js first.');
+  const email=$('#authEmail').value.trim(), password=$('#authPassword').value;
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  if(error) return toast(error.message);
+  closeModals(); toast('Welcome back.');
+}
+async function signUp(){
+  if(!sb) return toast('Add Supabase URL + anon key in config.js first.');
+  const email=$('#authEmail').value.trim(), password=$('#authPassword').value;
+  const {error}=await sb.auth.signUp({email,password});
+  if(error) return toast(error.message);
+  closeModals(); toast('Account created. Check email if confirmation is enabled.');
+}
+async function fetchTable(name, fallback, opts={}){
+  if(!sb) return fallback;
+  let q = sb.from(name).select('*');
+  if(opts.eq) q = q.eq(opts.eq[0], opts.eq[1]);
+  if(opts.order) q = q.order(opts.order, {ascending:false});
+  const {data,error}=await q.limit(opts.limit || 60);
+  if(error){ console.warn(name,error); return fallback; }
+  return data || [];
+}
+async function loadAll(){
+  const [profiles,squads,services,plans] = await Promise.all([
+    fetchTable('profiles', demo.profiles, {limit:30}),
+    fetchTable('squads', demo.squads, {order:'created_at'}),
+    fetchTable('services', demo.services, {order:'created_at'}),
+    fetchTable('plans', demo.plans)
+  ]);
+  renderFeed(profiles, services);
+  renderSquads(squads);
+  renderServices(services);
+  renderPlans(plans.length ? plans : demo.plans);
+  $('#metricUsers').textContent = profiles.length;
+  $('#metricServices').textContent = services.filter(s=>s.status==='approved').length;
+}
+function renderFeed(profiles, services){
+  const approved = profiles.filter(p=>p.account_status === 'approved' || p.role === 'admin').slice(0,6);
+  $('#feedGrid').innerHTML = approved.map(p=>`<article class="card"><span class="pill ${p.role==='admin'?'gold':''}">${p.role==='admin'?'👑 Admin':'✓ Player'}</span><h3>${safe(p.display_name || p.username || 'Player')}</h3><p>${safe(p.title || 'Rookie')} • ${safe(p.badge || 'Starter')}</p><div class="card-actions"><button class="glass">Invite</button><button class="ghost">View profile</button></div></article>`).join('') || '<p class="muted">No profiles yet.</p>';
+}
+function renderSquads(rows){
+  const rank=$('#rankFilter')?.value || '', region=$('#regionFilter')?.value || '';
+  const filtered = rows.filter(s=>(!rank || s.rank_required===rank || s.rank_required==='Any rank') && (!region || s.region===region));
+  $('#squadGrid').innerHTML = filtered.map(s=>`<article class="card"><span class="pill">${safe(s.game || 'Valorant')}</span><h3>${safe(s.name)}</h3><p>${safe(s.description || 'Squad up and play.')}</p><p><b>${safe(s.region || 'Any region')}</b> • ${safe(s.rank_required || 'Any rank')}</p><div class="card-actions"><button class="primary">Request Join</button><button class="glass">Invite Friend</button></div></article>`).join('') || '<p class="muted">No squads found.</p>';
+}
+function renderServices(rows){
+  const visible = rows.filter(s=>s.status === 'approved' || s.owner_id === currentUser?.id || profile?.role === 'admin');
+  $('#serviceGrid').innerHTML = visible.map(s=>`<article class="card"><span class="pill ${s.status==='approved'?'':'gold'}">${safe(s.status || 'pending')}</span><h3>${safe(s.title)}</h3><p>${safe(s.description || '')}</p><div class="price">${money(s.price_inr)}</div><small>Platform commission: ${s.commission_percent || cfg.PLATFORM_COMMISSION_PERCENT || 15}%</small><div class="card-actions"><button class="primary" data-action="bookService" data-id="${s.id}" data-price="${s.price_inr}">Book</button><button class="glass">Message coach</button></div></article>`).join('') || '<p class="muted">No services yet.</p>';
+}
+function renderPlans(rows){
+  const order = {free:0,silver:1,gold:2,diamond:3,legend:4};
+  rows.sort((a,b)=>(order[a.plan_key]??9)-(order[b.plan_key]??9));
+  $('#planGrid').innerHTML = rows.map(p=>`<article class="price-card ${p.plan_key==='legend'?'featured':''}"><span class="pill ${p.plan_key==='legend'?'gold':''}">${safe(p.badge)}</span><h3>${safe(p.name)}</h3><div class="price">${money(p.price_inr)}</div><p>${safe(p.title)}</p><ul>${(Array.isArray(p.perks)?p.perks:JSON.parse(p.perks || '[]')).map(x=>`<li>${safe(x)}</li>`).join('')}</ul><button class="primary full" data-action="buyPlan" data-plan="${p.plan_key}" data-price="${p.price_inr}">${p.price_inr ? 'Upgrade' : 'Current / Start'}</button></article>`).join('');
+}
+async function createSquad(){
+  if(!currentUser) return requireLogin(()=>{});
+  const payload={owner_id:currentUser.id,name:$('#squadName').value.trim(),region:$('#squadRegion').value.trim(),rank_required:$('#squadRank').value.trim(),description:$('#squadDesc').value.trim(),game:'Valorant'};
+  if(!payload.name) return toast('Squad name required.');
+  if(sb){ const {error}=await sb.from('squads').insert(payload); if(error) return toast(error.message); }
+  closeModals(); toast('Squad created.'); loadAll();
+}
+async function createService(){
+  if(!currentUser) return requireLogin(()=>{});
+  const price = Number($('#servicePrice').value || 0);
+  const payload={owner_id:currentUser.id,title:$('#serviceTitle').value.trim(),description:$('#serviceDesc').value.trim(),price_inr:price,commission_percent:cfg.PLATFORM_COMMISSION_PERCENT || 15,status:'pending',game:'Valorant',category:'coaching'};
+  if(!payload.title || !price) return toast('Title and price required.');
+  if(sb){ const {error}=await sb.from('services').insert(payload); if(error) return toast(error.message); }
+  closeModals(); toast('Service submitted for admin approval.'); loadAll();
+}
+async function buyPlan(plan, price){
+  requireLogin(async()=>{
+    const commission=0;
+    if(sb){ const {error}=await sb.from('orders').insert({buyer_id:currentUser.id,plan_key:plan,amount_inr:price,platform_commission_inr:commission,status:'pending'}); if(error) return toast(error.message); }
+    toast('Order created. Connect Razorpay to collect payment and auto-activate.');
+  });
+}
+async function bookService(id, price){
+  requireLogin(async()=>{
+    const commission = Math.round(price * ((cfg.PLATFORM_COMMISSION_PERCENT || 15)/100));
+    if(sb){ const {error}=await sb.from('orders').insert({buyer_id:currentUser.id,service_id:id,amount_inr:price,platform_commission_inr:commission,status:'pending'}); if(error) return toast(error.message); }
+    toast('Booking order created. Payment integration next.');
+  });
+}
+async function quickMatch(){
+  const squads = await fetchTable('squads', demo.squads);
+  const pick = squads[Math.floor(Math.random()*squads.length)];
+  toast(pick ? `Matched: ${pick.name}` : 'Create the first squad.');
+  location.hash = 'squads';
+}
+async function loadChat(){
+  const rows = await fetchTable('messages', demo.messages, {order:'created_at',limit:80});
+  $('#chatMessages').innerHTML = rows.reverse().map(m=>`<div class="msg ${m.sender_id===currentUser?.id?'me':''}"><b>${safe(m.sender_name || 'Player')}</b><br>${safe(m.content)}</div>`).join('');
+  const box=$('#chatMessages'); box.scrollTop=box.scrollHeight;
+}
+async function sendMessage(){
+  requireLogin(async()=>{
+    const input=$('#chatInput'), content=input.value.trim(); if(!content) return;
+    const sender_name = profile?.display_name || profile?.username || currentUser.email?.split('@')[0] || 'Player';
+    if(sb){ const {error}=await sb.from('messages').insert({sender_id:currentUser.id,sender_name,content,channel:'global'}); if(error) return toast(error.message); }
+    input.value=''; await loadChat();
+  });
+}
+async function loadAdmin(){
+  if(hasSupabase && profile?.role !== 'admin'){ toast('Admin only.'); return; }
+  const [users,services,orders] = await Promise.all([
+    fetchTable('profiles', demo.profiles, {limit:80}), fetchTable('services', demo.services, {limit:80}), fetchTable('orders', demo.orders, {limit:80})
+  ]);
+  $('#adminUsers').innerHTML = users.map(u=>`<div class="admin-item"><div><b>${safe(u.display_name||u.username||u.id)}</b><br><small>${safe(u.role)} • ${safe(u.account_status)} • ${safe(u.title||'')}</small></div><div class="actions"><button class="glass" data-action="adminUser" data-op="approved" data-id="${u.id}">Approve</button><button class="glass" data-action="adminUser" data-op="verified" data-id="${u.id}">Verify</button><button class="danger" data-action="adminUser" data-op="banned" data-id="${u.id}">Ban</button></div></div>`).join('');
+  $('#adminServices').innerHTML = services.map(s=>`<div class="admin-item"><div><b>${safe(s.title)}</b><br><small>${safe(s.status)} • ${money(s.price_inr)}</small></div><div class="actions"><button class="glass" data-action="adminService" data-op="approved" data-id="${s.id}">Approve</button><button class="danger" data-action="adminService" data-op="rejected" data-id="${s.id}">Reject</button></div></div>`).join('');
+  $('#adminOrders').innerHTML = orders.map(o=>`<div class="admin-item"><div><b>${money(o.amount_inr)}</b><br><small>${safe(o.status)} • commission ${money(o.platform_commission_inr)}</small></div><div class="actions"><button class="glass">Verify Payment</button></div></div>`).join('');
+}
+async function adminUser(id, op){
+  if(!sb) return toast('Demo mode: add Supabase config to make changes.');
+  let patch = {};
+  if(op === 'approved') patch={account_status:'approved',is_banned:false};
+  if(op === 'verified') patch={is_verified:true,badge:'Verified',title:'Verified Gamer'};
+  if(op === 'banned') patch={account_status:'banned',is_banned:true};
+  const {error}=await sb.from('profiles').update(patch).eq('id',id);
+  if(error) return toast(error.message); toast('User updated.'); loadAdmin(); loadAll();
+}
+async function adminService(id, op){
+  if(!sb) return toast('Demo mode: add Supabase config to make changes.');
+  const {error}=await sb.from('services').update({status:op}).eq('id',id);
+  if(error) return toast(error.message); toast('Service updated.'); loadAdmin(); loadAll();
+}
+$('#rankFilter')?.addEventListener('change', loadAll);
+$('#regionFilter')?.addEventListener('change', loadAll);
