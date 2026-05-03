@@ -2670,7 +2670,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const upi = () => cfg2().MANUAL_UPI_ID || 'ralhanx@ptaxis';
   const qr = () => cfg2().MANUAL_UPI_QR_URL || 'upi-qr.jpeg';
   const rupee = (v) => { try { return typeof money === 'function' ? money(v) : `₹${Number(v||0).toLocaleString('en-IN')}`; } catch(e){ return `₹${v||0}`; } };
-  const say = (m) => { try { return typeof toast === 'function' ? toast(m); } catch(e){} alert(m); };
+  const say = (m) => { try { if (typeof toast === 'function') return toast(m); } catch(e){} alert(m); };
   const admin = () => { try { return typeof isAdmin === 'function' && isAdmin(); } catch(e){ return false; } };
   const signedProofUrl = async (path) => {
     if (!path || !sb) return '';
@@ -2865,4 +2865,142 @@ document.addEventListener('DOMContentLoaded', () => {
   const oldSwitch2 = window.switchView || (typeof switchView !== 'undefined' ? switchView : null);
   if (oldSwitch2) { switchView = function(id){ oldSwitch2(id); if(id==='admin') setTimeout(renderManualOrdersAdminV2,120); if(id==='market') setTimeout(renderSellerWalletV2,250); }; window.switchView = switchView; }
   document.addEventListener('DOMContentLoaded', ()=>{ ensureModal2(); setTimeout(()=>{ renderManualOrdersAdminV2(); renderSellerWalletV2(); }, 1200); });
+})();
+
+/* ===== FINAL PATCH: secure admin system + no-stuck intro ===== */
+(function(){
+  function hideBoot(){
+    try { document.getElementById('boot')?.classList.add('hide'); } catch(e) {}
+  }
+  setTimeout(hideBoot, 1600);
+  window.addEventListener('error', function(){ setTimeout(hideBoot, 100); });
+  window.addEventListener('unhandledrejection', function(){ setTimeout(hideBoot, 100); });
+  window.addEventListener('load', function(){ setTimeout(hideBoot, 500); });
+
+  function safeText(v){
+    try { return String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+    catch(e){ return ''; }
+  }
+  function inr(v){
+    try { return typeof money === 'function' ? money(v) : '₹' + Number(v || 0).toLocaleString('en-IN'); }
+    catch(e){ return '₹' + (v || 0); }
+  }
+  function isFounder(){
+    try { return typeof isAdmin === 'function' && isAdmin(); } catch(e){ return false; }
+  }
+  function notify(msg){
+    try { if (typeof toast === 'function') return toast(msg); } catch(e) {}
+    alert(msg);
+  }
+  async function signedProof(path){
+    try {
+      if (!path || !window.sb) return '';
+      const { data } = await sb.storage.from('payment-proofs').createSignedUrl(path, 600);
+      return data?.signedUrl || '';
+    } catch(e) { return ''; }
+  }
+
+  window.stackopsSecureAdminLoadPayments = async function(){
+    const host = document.querySelector('#manualOrdersAdmin');
+    if (!host || !window.sb || !isFounder()) return;
+    host.innerHTML = '<div class="empty-state pulse-soft">Loading secure payment queue...</div>';
+    const { data, error } = await sb.from('manual_orders').select('*').order('created_at',{ascending:false}).limit(100);
+    if (error) {
+      host.innerHTML = `<div class="error-card"><b>Cannot load payments</b><br>${safeText(error.message)}<br><small>Run SECURE_ADMIN_MANUAL_PAYMENTS_SQL.sql from this ZIP.</small></div>`;
+      return;
+    }
+    const rows = data || [];
+    host.innerHTML = rows.length ? rows.map(o => {
+      const status = safeText(o.status || 'pending');
+      const payout = safeText(o.payout_status || 'pending');
+      const proof = safeText(o.proof_path || '');
+      return `<article class="order-card-premium ${status}">
+        <div class="order-top"><h3>${safeText(o.service_title || o.item_type || 'Manual Payment')}</h3><span class="status-pill ${status}">${status}</span></div>
+        <div class="order-meta">
+          <span><b>Amount:</b> ${inr(o.amount_inr)}</span>
+          <span><b>UTR:</b> ${safeText(o.reference_number || 'missing')}</span>
+          <span><b>Commission:</b> ${inr(o.commission_inr)}</span>
+          <span><b>Seller payout:</b> ${inr(o.seller_payout_inr)}</span>
+          <span><b>Payout:</b> ${payout}</span>
+          <span><b>Submitted:</b> ${new Date(o.created_at || Date.now()).toLocaleString()}</span>
+        </div>
+        <div class="proof-actions">
+          <button class="mini" onclick="stackopsOpenProof('${proof}')">View Proof</button>
+          ${status === 'pending' ? `<button class="mini success" onclick="stackopsApproveOrder('${o.id}')">Approve</button><button class="mini danger" onclick="stackopsRejectOrder('${o.id}')">Reject</button>` : ''}
+          ${status === 'approved' && payout !== 'paid' ? `<button class="mini" onclick="stackopsMarkSellerPaid('${o.id}')">Mark Seller Paid</button>` : ''}
+        </div>
+      </article>`;
+    }).join('') : '<div class="empty-state">No manual payment requests yet.</div>';
+  };
+
+  window.stackopsOpenProof = async function(path){
+    const url = await signedProof(path);
+    if (!url) return notify('Proof not available. Check storage policy or proof path.');
+    window.open(url, '_blank');
+  };
+  window.stackopsApproveOrder = async function(id){
+    if (!window.sb || !isFounder()) return notify('Admin only');
+    const { data: order } = await sb.from('manual_orders').select('*').eq('id',id).single().then(r=>r).catch(()=>({data:null}));
+    const { error } = await sb.from('manual_orders').update({ status:'approved', approved_at:new Date().toISOString() }).eq('id', id);
+    if (error) return notify(error.message);
+    try {
+      if (order?.buyer_id && order?.item_type === 'plan') await sb.from('profiles').update({ plan_key: order.plan_key || 'premium', is_verified: true }).eq('id', order.buyer_id);
+      if (order?.seller_id) {
+        const { data: seller } = await sb.from('profiles').select('pending_payout_inr,total_earned_inr').eq('id', order.seller_id).single().then(r=>r).catch(()=>({data:null}));
+        await sb.from('profiles').update({
+          pending_payout_inr: Number(seller?.pending_payout_inr || 0) + Number(order.seller_payout_inr || 0),
+          total_earned_inr: Number(seller?.total_earned_inr || 0) + Number(order.seller_payout_inr || 0)
+        }).eq('id', order.seller_id);
+      }
+      if (order?.buyer_id) await sb.from('notifications').insert({ user_id: order.buyer_id, type:'payment_approved', content:'Your StackOps payment was approved. Access is now active.' });
+    } catch(e) {}
+    notify('Payment approved');
+    stackopsSecureAdminLoadPayments();
+  };
+  window.stackopsRejectOrder = async function(id){
+    if (!window.sb || !isFounder()) return notify('Admin only');
+    const { data: order } = await sb.from('manual_orders').select('buyer_id').eq('id',id).single().then(r=>r).catch(()=>({data:null}));
+    const { error } = await sb.from('manual_orders').update({ status:'rejected' }).eq('id', id);
+    if (error) return notify(error.message);
+    try { if (order?.buyer_id) await sb.from('notifications').insert({ user_id: order.buyer_id, type:'payment_rejected', content:'Your payment proof was rejected. Upload a clearer screenshot with UTR/reference visible.' }); } catch(e) {}
+    notify('Payment rejected');
+    stackopsSecureAdminLoadPayments();
+  };
+  window.stackopsMarkSellerPaid = async function(id){
+    if (!window.sb || !isFounder()) return notify('Admin only');
+    const { data: order } = await sb.from('manual_orders').select('*').eq('id',id).single().then(r=>r).catch(()=>({data:null}));
+    const { error } = await sb.from('manual_orders').update({ payout_status:'paid', payout_paid_at:new Date().toISOString() }).eq('id', id);
+    if (error) return notify(error.message);
+    try {
+      if (order?.seller_id) {
+        const { data: seller } = await sb.from('profiles').select('pending_payout_inr,paid_payout_inr').eq('id', order.seller_id).single().then(r=>r).catch(()=>({data:null}));
+        await sb.from('profiles').update({
+          pending_payout_inr: Math.max(0, Number(seller?.pending_payout_inr || 0) - Number(order.seller_payout_inr || 0)),
+          paid_payout_inr: Number(seller?.paid_payout_inr || 0) + Number(order.seller_payout_inr || 0)
+        }).eq('id', order.seller_id);
+      }
+    } catch(e) {}
+    notify('Seller payout marked paid');
+    stackopsSecureAdminLoadPayments();
+  };
+
+  // Hook into existing admin view after legacy render finishes.
+  const attach = function(){
+    try {
+      const admin = document.querySelector('#admin');
+      const adminGrid = document.querySelector('#admin .admin-grid') || admin;
+      if (admin && adminGrid && !document.querySelector('#manualOrdersAdmin')) {
+        adminGrid.insertAdjacentHTML('beforeend', `<section class="panel manual-admin-panel"><div class="panel-head"><div><h2>Manual Payment Requests</h2><span class="secure-admin-badge">🔒 Secure admin queue</span></div><span class="chip">Middleman escrow</span></div><div id="manualOrdersAdmin" class="admin-list"></div></section>`);
+      }
+      stackopsSecureAdminLoadPayments();
+    } catch(e) {}
+  };
+  const oldSwitch = window.switchView || (typeof switchView !== 'undefined' ? switchView : null);
+  if (oldSwitch) {
+    window.switchView = switchView = function(id){
+      oldSwitch(id);
+      if (id === 'admin') setTimeout(attach, 220);
+    };
+  }
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(attach, 1800); });
 })();

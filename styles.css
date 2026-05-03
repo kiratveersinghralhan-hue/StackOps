@@ -138,3 +138,26 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;bac
 
 /* NEXT UPGRADE: polished manual UPI + wallet UI */
 .wallet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}.wallet-stat{padding:16px;border-radius:22px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12)}.wallet-stat b{display:block;font-size:1.35rem}.wallet-stat small{color:var(--muted)}.order-card-premium{padding:16px;margin:12px 0;border-radius:24px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(255,255,255,.025));box-shadow:0 18px 42px rgba(0,0,0,.18)}.order-card-premium.pending{border-color:rgba(255,205,80,.34)}.order-card-premium.approved{border-color:rgba(90,255,160,.36)}.order-card-premium.rejected{border-color:rgba(255,90,110,.36)}.order-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.order-top h3{margin:0}.order-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.order-meta span{padding:10px;border-radius:16px;background:rgba(0,0,0,.2);color:var(--muted)}.status-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:8px 12px;background:rgba(255,255,255,.08);font-weight:800}.status-pill.pending{color:#ffd66b}.status-pill.approved{color:#78ffad}.status-pill.rejected{color:#ff7682}.proof-actions{display:flex;gap:8px;flex-wrap:wrap}.manual-modal-card .notice{padding:12px;border-radius:16px;background:rgba(255,200,90,.08);border:1px solid rgba(255,200,90,.18);color:#f0e1c4}.qr-box{box-shadow:0 0 45px rgba(255,255,255,.08)}@media(max-width:560px){.wallet-grid{grid-template-columns:1fr}.order-meta{grid-template-columns:1fr}.order-top{display:block}.proof-actions .mini{width:100%}}
+
+/* ===== FINAL SECURE ADMIN + INTRO POLISH ===== */
+.boot-v2{
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255,70,85,.24), transparent 34%),
+    radial-gradient(circle at 50% 58%, rgba(255,209,102,.16), transparent 30%),
+    #050507;
+}
+.boot-v2 .boot-card{animation:bootCardPulse 1.4s ease both;text-align:center}
+.boot-logo{width:108px;height:108px;border-radius:30px;overflow:hidden;box-shadow:0 0 80px rgba(255,209,102,.24), 0 0 28px rgba(255,70,85,.22);animation:logoFloat 1.6s ease-in-out infinite alternate;background:#050507}
+.boot-logo img{width:100%;height:100%;object-fit:cover}
+.boot-v2 h1{letter-spacing:.34em;margin:18px 0 6px;font-size:clamp(22px,5vw,42px);text-shadow:0 0 28px rgba(255,70,85,.3)}
+.boot-v2 p{color:#b9bbc7;margin:0 0 18px}
+.boot-status{display:flex;justify-content:center;gap:10px}
+.boot-status span{width:12px;height:12px;border-radius:999px;background:linear-gradient(135deg,#ff4655,#ffd166);animation:dotLoad .9s infinite ease-in-out;box-shadow:0 0 22px rgba(255,70,85,.45)}
+.boot-status span:nth-child(2){animation-delay:.12s}.boot-status span:nth-child(3){animation-delay:.24s}
+@keyframes logoFloat{from{transform:translateY(0) scale(.98)}to{transform:translateY(-8px) scale(1.02)}}
+@keyframes dotLoad{0%,100%{transform:translateY(0);opacity:.45}50%{transform:translateY(-8px);opacity:1}}
+@keyframes bootCardPulse{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+.secure-admin-badge{display:inline-flex;gap:8px;align-items:center;border:1px solid rgba(91,255,158,.28);background:rgba(91,255,158,.08);color:#7CFFAA;border-radius:999px;padding:8px 12px;font-weight:900;font-size:.8rem;margin:8px 0 0}
+.admin-list .error-card,.manual-admin-panel .error-card{padding:16px;border:1px solid rgba(255,209,102,.32);background:rgba(255,209,102,.08);border-radius:18px;color:#ffdca0;line-height:1.45}
+.order-card-premium .proof-actions .mini{min-height:42px}
+.manual-order-card,.order-card-premium{word-break:break-word}
