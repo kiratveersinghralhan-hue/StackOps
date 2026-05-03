@@ -2071,330 +2071,219 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 })();
 
-/* === StackOps Verification + Seller Proof Final Upgrade === */
+/* === FINAL SELLER DESK POLISH: one row per user, pending default, details + unapprove === */
 (function(){
-  const q = (s)=>document.querySelector(s);
-  const safe = (v='') => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const say = (m)=>{ try { toast(m); } catch { alert(m); } };
+  const esc = (v)=>String(v ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const qs = (s)=>document.querySelector(s);
+  const notify = (m)=>{ try{ toast(m); } catch{ alert(m); } };
+  let sellerFilter = 'pending';
+  let cachedSellerApps = [];
+  let cachedProfiles = {};
 
-  function ensureSellerProofModal(){
-    if(q('#sellerProofModal')) return;
-    document.body.insertAdjacentHTML('beforeend', `
-      <div id="sellerProofModal" class="modal stackops-proof-modal">
-        <form class="modal-card proof-card" id="sellerProofForm">
-          <button class="close" type="button" data-close="sellerProofModal">×</button>
-          <span class="eyebrow">Seller / Coach Review</span>
-          <h2>Apply with proof</h2>
-          <p class="muted">Upload proof so Founder can review you properly. Good proof: coaching portfolio, tournament result, service screenshot, social profile, certificate, or past client proof.</p>
-          <label>Seller type
-            <select id="sellerServiceCategory" required>
-              <option value="Valorant Coaching">Valorant Coaching</option>
-              <option value="Riot Games Coaching">Riot Games Coaching</option>
-              <option value="Team Manager / Scrims">Team Manager / Scrims</option>
-              <option value="Graphic / Banner Service">Graphic / Banner Service</option>
-              <option value="Other Gaming Service">Other Gaming Service</option>
-            </select>
-          </label>
-          <label>Why should we approve you?
-            <textarea id="sellerProofNote" required placeholder="Example: I coach Immortal/Radiant players, here is my proof and service details..."></textarea>
-          </label>
-          <label>Proof document / image
-            <input id="sellerProofFile" type="file" accept="image/*,.pdf,.doc,.docx" required />
-          </label>
-          <div class="proof-rule-box">
-            <b>Approval checks</b>
-            <span>✅ Real profile and clear service</span>
-            <span>✅ Proof document uploaded</span>
-            <span>✅ No spam / ban flag</span>
-            <span>✅ Founder final review</span>
-          </div>
-          <button class="btn primary full" type="submit">Submit for Review</button>
-        </form>
-      </div>
-      <div id="sellerDetailsModal" class="modal stackops-proof-modal">
-        <div class="modal-card proof-card">
-          <button class="close" type="button" data-close="sellerDetailsModal">×</button>
-          <span class="eyebrow">Account Details</span>
-          <h2>Seller review file</h2>
-          <div id="sellerDetailsBody" class="seller-details-body">Loading...</div>
-        </div>
-      </div>
-    `);
-    document.addEventListener('click', (e)=>{
-      const close = e.target?.closest?.('[data-close]');
-      if(close){ const el = q('#'+close.dataset.close); if(el) el.classList.remove('show'); }
-    });
-    const form = q('#sellerProofForm');
-    if(form) form.addEventListener('submit', submitSellerProofApplication);
-  }
-
-  async function getActiveUser(){
+  async function currentUser(){
     try{
       const s = await sb?.auth?.getSession?.();
-      if(s?.data?.session){ session = s.data.session; return s.data.session.user; }
+      if(s?.data?.session?.user){ session = s.data.session; return s.data.session.user; }
       const u = await sb?.auth?.getUser?.();
       return u?.data?.user || session?.user || null;
     }catch{ return session?.user || null; }
   }
 
-  async function getProfile(userId){
-    if(!sb || !userId) return null;
-    const {data} = await sb.from('profiles').select('*').eq('id', userId).maybeSingle().then(undefined,()=>({data:null}));
-    return data;
+  async function profileFor(user){
+    if(!sb || !user) return null;
+    const got = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle().then(r=>r).catch(()=>({data:null}));
+    if(got.data){ me = got.data; return got.data; }
+    const p = { id:user.id, username:(user.email||'player').split('@')[0], display_name:(user.email||'player').split('@')[0], account_status:'approved', seller_status:'none', is_seller:false, is_verified:false, xp:0, plan_key:'free' };
+    await sb.from('profiles').upsert(p,{onConflict:'id'}).catch?.(()=>{});
+    me = p; return p;
   }
 
-  async function countFrom(table, column, id){
-    if(!sb || !id) return 0;
-    const {count} = await sb.from(table).select('id', {count:'exact', head:true}).eq(column, id).then(undefined,()=>({count:0}));
-    return count || 0;
-  }
-
-  async function computeTrustProgress(userId){
-    const profile = await getProfile(userId) || {};
-    const posts = await countFrom('posts','user_id',userId);
-    const messages = await countFrom('messages','sender_id',userId);
-    const teamsOwned = await countFrom('teams','owner_id',userId);
-    let ageHours = 0;
-    if(profile.created_at) ageHours = Math.max(0, Math.floor((Date.now() - new Date(profile.created_at).getTime()) / 36e5));
-    const profileComplete = !!(profile.username || profile.display_name) && !!(profile.main_game || profile.riot_id || profile.bio);
-    const avatar = !!(profile.avatar_url || profile.profile_pic_url);
-    const noBadHistory = !profile.is_banned && profile.seller_status !== 'rejected';
-    return {
-      profile,
-      posts,
-      messages,
-      teamsOwned,
-      ageHours,
-      profileComplete,
-      avatar,
-      noBadHistory,
-      eligible: profileComplete && avatar && posts >= 3 && messages >= 5 && teamsOwned >= 1 && ageHours >= 24 && noBadHistory
-    };
-  }
-
-  function progressRow(ok, label, value=''){
-    return `<div class="trust-progress-row ${ok?'ok':'wait'}"><span>${ok?'✅':'⏳'} ${safe(label)}</span><b>${safe(value)}</b></div>`;
-  }
-
-  async function renderVerificationCenter(){
-    ensureSellerProofModal();
-    if(q('#verificationCenter')){
-      // continue below
-    } else {
-      const account = q('#account .account-grid') || q('#home .dash-grid') || q('main');
-      if(account){
-        account.insertAdjacentHTML('beforeend', `
-          <section class="panel verification-center" id="verificationCenter">
-            <div class="panel-head"><h2>Verification Center</h2><span class="chip">Trust</span></div>
-            <p class="muted">Build real trust before applying. This keeps spam away and makes verified users meaningful.</p>
-            <div id="verificationProgressBox" class="trust-progress-box">Login to see progress.</div>
-            <button class="btn primary full" id="applyVerifyBtn">Apply for Verification</button>
-          </section>
-        `);
-      }
-    }
-    const user = await getActiveUser();
-    const box = q('#verificationProgressBox');
-    const btn = q('#applyVerifyBtn');
-    if(!box || !btn) return;
-    if(!user){ box.innerHTML = 'Login to track verification readiness.'; btn.disabled = true; return; }
-    const p = await computeTrustProgress(user.id);
-    box.innerHTML = [
-      progressRow(p.profileComplete, 'Profile completed', p.profileComplete ? 'Done' : 'Add bio/game/Riot ID'),
-      progressRow(p.avatar, 'Avatar uploaded', p.avatar ? 'Done' : 'Upload image'),
-      progressRow(p.posts >= 3, 'Community activity', `${p.posts}/3 posts`),
-      progressRow(p.messages >= 5, 'Helpful chat activity', `${p.messages}/5 messages`),
-      progressRow(p.teamsOwned >= 1, 'Team involvement', `${p.teamsOwned}/1 team`),
-      progressRow(p.ageHours >= 24, 'Account age', `${Math.min(p.ageHours,24)}/24h`),
-      progressRow(p.noBadHistory, 'Clean account history', p.noBadHistory ? 'Clear' : 'Needs review')
-    ].join('');
-    btn.disabled = !p.eligible;
-    btn.textContent = p.eligible ? 'Apply for Verification' : 'Complete Requirements First';
-    btn.onclick = async ()=>{
-      if(!p.eligible) return say('Complete all verification requirements first.');
-      const row = { user_id:user.id, status:'pending', posts_count:p.posts, messages_count:p.messages, teams_count:p.teamsOwned, account_age_hours:p.ageHours, requirements_snapshot:p };
-      const {error} = await sb.from('verification_requests').upsert(row, {onConflict:'user_id'});
-      if(error) return say('Verification request failed: ' + error.message);
-      say('Verification request submitted for founder review.');
-    };
-  }
-
+  // Clean Apply to Sell: update existing application if it exists, otherwise insert. No duplicates.
   window.applySeller = async function(){
-    ensureSellerProofModal();
-    const user = await getActiveUser();
-    if(!user) return say('Login first to apply as seller.');
-    const existing = await sb.from('seller_applications').select('id,status').eq('user_id', user.id).maybeSingle().then(undefined,()=>({data:null}));
-    if(existing?.data?.status === 'pending') return say('Your seller application is already pending.');
-    if(existing?.data?.status === 'approved') return say('Seller already approved. Open your seller tools.');
-    const modal = q('#sellerProofModal'); if(modal) modal.classList.add('show');
-  };
-
-  async function submitSellerProofApplication(e){
-    e.preventDefault();
-    const user = await getActiveUser();
-    if(!user) return say('Login first.');
-    const profile = await getProfile(user.id) || {};
-    const file = q('#sellerProofFile')?.files?.[0];
-    const note = q('#sellerProofNote')?.value?.trim();
-    const cat = q('#sellerServiceCategory')?.value || 'Gaming Service';
-    if(!file) return say('Upload a proof document or image first.');
-    if(!note || note.length < 20) return say('Add a proper note about your service/proof.');
-    let proofUrl = '';
+    const btn = qs('#applySellerBtn');
+    const oldText = btn?.textContent || 'Apply to Sell';
     try{
-      const cleanName = file.name.replace(/[^a-zA-Z0-9_.-]/g,'_');
-      const path = `${user.id}/${Date.now()}-${cleanName}`;
-      const up = await sb.storage.from('seller-proofs').upload(path, file, {upsert:true, contentType:file.type || undefined});
-      if(up.error) throw up.error;
-      const pub = sb.storage.from('seller-proofs').getPublicUrl(path);
-      proofUrl = pub?.data?.publicUrl || path;
-    }catch(err){
-      return say('Proof upload failed: ' + (err?.message || err));
+      if(btn){ btn.disabled = true; btn.textContent = 'Submitting...'; }
+      if(!sb) throw new Error('Supabase is not connected. Check config.js');
+      const user = await currentUser();
+      if(!user){ notify('Please login first.'); return; }
+      const p = await profileFor(user);
+      if(p?.is_seller === true || p?.seller_status === 'approved'){
+        notify('Seller account already active.');
+        return;
+      }
+      const fullRow = {
+        user_id: user.id,
+        applicant_email: user.email || '',
+        applicant_name: p?.display_name || p?.username || (user.email||'seller').split('@')[0],
+        note: 'Seller application submitted from StackOps marketplace',
+        status: 'pending',
+        created_at: new Date().toISOString()
+      };
+
+      const existing = await sb.from('seller_applications').select('id,status').eq('user_id', user.id).maybeSingle().then(r=>r).catch(()=>({data:null,error:null}));
+      let res;
+      if(existing?.data?.id){
+        res = await sb.from('seller_applications').update({
+          applicant_email: fullRow.applicant_email,
+          applicant_name: fullRow.applicant_name,
+          note: fullRow.note,
+          status: 'pending',
+          reviewed_at: null
+        }).eq('id', existing.data.id);
+      } else {
+        res = await sb.from('seller_applications').insert(fullRow);
+      }
+      if(res?.error) throw res.error;
+      await sb.from('profiles').update({seller_status:'pending', is_seller:false}).eq('id', user.id).then(()=>{}).catch?.(()=>{});
+      try{ await sb.from('activity_events').insert({actor_id:user.id, username:fullRow.applicant_name, event_type:'seller_application', body:'Submitted seller application'}); }catch{}
+      notify('Seller application submitted. Founder can review it now.');
+      try{ addLiveEvent('Submitted seller application', fullRow.applicant_name, 'seller'); }catch{}
+      try{ await window.renderSellerReview?.(); }catch{}
+      try{ await window.stackopsRefreshLive?.(); }catch{}
+    }catch(e){
+      console.error('Apply seller failed', e);
+      notify('Could not submit seller application: ' + (e?.message || e));
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = oldText; }
     }
-    const applicantName = profile.display_name || profile.username || user.email;
-    const row = {
-      user_id:user.id,
-      applicant_email:user.email,
-      applicant_name:applicantName,
-      note,
-      status:'pending',
-      service_category:cat,
-      proof_url:proofUrl,
-      proof_file_name:file.name,
-      proof_note:note,
-      proof_uploaded:true,
-      created_at:new Date().toISOString()
-    };
-    const {error} = await sb.from('seller_applications').upsert(row, {onConflict:'user_id'});
-    if(error) return say('Could not submit seller application: ' + error.message);
-    await sb.from('profiles').update({seller_status:'pending'}).eq('id', user.id).then(undefined,()=>{});
-    await sb.from('activity_events').insert({actor_id:user.id, username:applicantName, event_type:'seller_application', body:'Submitted seller proof application'}).then(undefined,()=>{});
-    q('#sellerProofModal')?.classList.remove('show');
-    say('Seller application submitted with proof. Founder can review it now.');
-    try { await window.renderSellerReview?.(); } catch {}
-    try { await window.stackopsRefreshLive?.(); } catch {}
-  }
-
-  async function profileStats(userId){
-    return {
-      posts: await countFrom('posts','user_id',userId),
-      messages: await countFrom('messages','sender_id',userId),
-      teams: await countFrom('teams','owner_id',userId),
-      payments: await countFrom('payments','user_id',userId)
-    };
-  }
-
-  window.showSellerAccountDetails = async function(userId, appId){
-    ensureSellerProofModal();
-    const body = q('#sellerDetailsBody');
-    q('#sellerDetailsModal')?.classList.add('show');
-    if(body) body.innerHTML = 'Loading account details...';
-    const [profile, appRes, stats, trust] = await Promise.all([
-      getProfile(userId),
-      sb.from('seller_applications').select('*').eq('id', appId).maybeSingle().then(undefined,()=>({data:null})),
-      profileStats(userId),
-      computeTrustProgress(userId)
-    ]);
-    const app = appRes?.data || {};
-    if(body) body.innerHTML = `
-      <div class="detail-grid">
-        <div><b>Name</b><span>${safe(profile?.display_name || profile?.username || app.applicant_name || 'Unknown')}</span></div>
-        <div><b>Email</b><span>${safe(app.applicant_email || profile?.email || 'Not saved')}</span></div>
-        <div><b>Status</b><span>${safe(app.status || 'pending')}</span></div>
-        <div><b>Seller type</b><span>${safe(app.service_category || 'Not selected')}</span></div>
-        <div><b>Posts</b><span>${stats.posts}</span></div>
-        <div><b>Chat messages</b><span>${stats.messages}</span></div>
-        <div><b>Teams created</b><span>${stats.teams}</span></div>
-        <div><b>Account age</b><span>${trust.ageHours}h</span></div>
-      </div>
-      <h3>Seller note</h3><p>${safe(app.proof_note || app.note || 'No note')}</p>
-      ${app.proof_url ? `<a class="btn primary full" href="${safe(app.proof_url)}" target="_blank" rel="noopener">Open Proof Document</a>` : `<div class="empty-state">No proof uploaded</div>`}
-      <h3>Verification readiness</h3>
-      <div class="trust-progress-box">
-        ${progressRow(trust.profileComplete, 'Profile completed')}
-        ${progressRow(trust.avatar, 'Avatar uploaded')}
-        ${progressRow(trust.posts >= 3, 'Community posts', `${trust.posts}/3`)}
-        ${progressRow(trust.messages >= 5, 'Helpful chats', `${trust.messages}/5`)}
-        ${progressRow(trust.teamsOwned >= 1, 'Team involvement', `${trust.teamsOwned}/1`)}
-        ${progressRow(trust.noBadHistory, 'Clean history')}
-      </div>
-    `;
   };
+  try{ applySeller = window.applySeller; }catch{}
 
-  function sellerCardPro(app, profile={}){
-    const status = app.status || 'pending';
-    const name = profile.display_name || profile.username || app.applicant_name || app.applicant_email || (app.user_id||'seller').slice(0,8);
-    const email = app.applicant_email || profile.email || '';
-    const pending = status === 'pending';
-    return `<article class="seller-approval-card ${safe(status)}">
-      <div class="seller-topline">
-        <div class="seller-avatar">${safe((name||'S')[0])}</div>
-        <div><h3>${safe(name)}</h3><p>${safe(email || app.user_id || '')}</p></div>
-        <span class="status-pill ${safe(status)}">${safe(status)}</span>
+  function uniqueLatestByUser(apps){
+    const map = new Map();
+    (apps||[]).forEach(a=>{
+      const key = a.user_id || a.id;
+      const prev = map.get(key);
+      if(!prev || new Date(a.created_at||0) >= new Date(prev.created_at||0)) map.set(key,a);
+    });
+    return [...map.values()];
+  }
+
+  async function loadProfiles(userIds){
+    const map = {};
+    if(!sb || !userIds.length) return map;
+    const r = await sb.from('profiles').select('*').in('id', userIds).then(r=>r).catch(()=>({data:[]}));
+    (r.data||[]).forEach(p=>{ map[p.id]=p; });
+    return map;
+  }
+
+  async function getActivityCounts(uid){
+    const counts = {posts:0,chats:0,teams:0};
+    if(!sb || !uid) return counts;
+    try{ const r = await sb.from('posts').select('id',{count:'exact',head:true}).eq('user_id',uid); counts.posts = r.count ?? 0; }catch{}
+    try{ const r = await sb.from('messages').select('id',{count:'exact',head:true}).eq('user_id',uid); counts.chats = r.count ?? 0; }catch{}
+    try{ const r = await sb.from('teams').select('id',{count:'exact',head:true}).eq('owner_id',uid); counts.teams = r.count ?? 0; }catch{}
+    return counts;
+  }
+
+  function applicationCard(app){
+    const p = cachedProfiles[app.user_id] || {};
+    const name = p.display_name || p.username || app.applicant_name || app.applicant_email || (app.user_id||'seller').slice(0,8);
+    const email = app.applicant_email || p.email || '';
+    const status = (app.status || 'pending').toLowerCase();
+    const isApproved = status === 'approved';
+    const isRejected = status === 'rejected';
+    const cls = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending';
+    return `<div class="seller-review-card ${cls}">
+      <div class="seller-review-top">
+        <div class="seller-person"><div class="avatar">${esc((name||'S')[0])}</div><div><h3>${esc(name)}</h3><small>${esc(email || app.user_id || '')}</small></div></div>
+        <span class="seller-status">${esc(status)}</span>
       </div>
-      <div class="seller-meta-grid">
-        <span><b>Type</b>${safe(app.service_category || 'Gaming service')}</span>
-        <span><b>Proof</b>${app.proof_url ? 'Uploaded ✅' : 'Missing'}</span>
-        <span><b>Applied</b>${app.created_at ? new Date(app.created_at).toLocaleString() : ''}</span>
-        <span><b>User</b>${safe((app.user_id||'').slice(0,8))}</span>
-      </div>
-      <p class="seller-note">${safe(app.note || 'Seller application submitted from StackOps marketplace')}</p>
+      <p>${esc(app.note || 'Seller application from StackOps marketplace')}</p>
+      <small>${app.created_at ? new Date(app.created_at).toLocaleString() : ''}</small>
       <div class="seller-actions">
-        <button class="btn dark" onclick="showSellerAccountDetails('${safe(app.user_id)}','${safe(app.id)}')">Account Details</button>
-        ${pending ? `<button class="btn success" onclick="approveSellerApplication('${safe(app.id)}')">Approve</button><button class="btn danger" onclick="rejectSellerApplication('${safe(app.id)}')">Reject</button>` : `<span class="chip">${safe(status)}</span>`}
+        <button class="btn dark" onclick="viewSellerDetailsFinal('${app.id}')">Account Details</button>
+        ${!isApproved ? `<button class="btn primary" onclick="approveSellerFinal('${app.id}')">Approve</button>` : `<button class="btn dark" onclick="unapproveSellerFinal('${app.id}')">Unapprove</button>`}
+        ${!isRejected ? `<button class="btn danger" onclick="rejectSellerFinal('${app.id}')">Reject</button>` : `<button class="btn primary" onclick="reopenSellerFinal('${app.id}')">Reopen</button>`}
       </div>
-    </article>`;
+    </div>`;
   }
 
   window.renderSellerReview = async function(){
-    if(!sb) return;
-    const list = q('#sellerReviewList') || q('#adminSellers');
+    const list = qs('#sellerReviewList');
+    const mini = qs('#adminSellers');
     if(list) list.innerHTML = '<div class="empty-state pulse-soft">Loading seller applications...</div>';
-    const {data:apps,error} = await sb.from('seller_applications').select('*').order('created_at',{ascending:false}).then(undefined,e=>({data:[],error:e}));
-    if(error){ if(list) list.innerHTML = `<div class="empty-state">Could not load applications: ${safe(error.message)}</div>`; return; }
-    const ids = [...new Set((apps||[]).map(a=>a.user_id).filter(Boolean))];
-    const profiles = {};
-    if(ids.length){ const pr = await sb.from('profiles').select('*').in('id',ids).then(undefined,()=>({data:[]})); (pr.data||[]).forEach(p=>profiles[p.id]=p); }
-    const filter = window.sellerDeskFilterFinal || window.sellerDeskFilter || 'pending';
-    const rows = filter === 'all' ? (apps||[]) : (apps||[]).filter(a=>(a.status||'pending')===filter);
-    if(list) list.innerHTML = rows.map(a=>sellerCardPro(a, profiles[a.user_id] || {})).join('') || '<div class="empty-state">No applications in this filter.</div>';
-    const set=(sel,val)=>{const el=q(sel); if(el) el.textContent=String(val);};
-    set('#sellerPendingCount',(apps||[]).filter(a=>(a.status||'pending')==='pending').length);
-    set('#sellerApprovedCount',(apps||[]).filter(a=>a.status==='approved').length);
-    set('#sellerRejectedCount',(apps||[]).filter(a=>a.status==='rejected').length);
-    set('#sellerDeskStatus', `${(apps||[]).length} total`);
+    if(!sb){ if(list) list.innerHTML = '<div class="empty-state">Supabase not connected.</div>'; return; }
+    const res = await sb.from('seller_applications').select('*').order('created_at',{ascending:false}).then(r=>r).catch(e=>({data:[],error:e}));
+    if(res.error){ if(list) list.innerHTML = `<div class="empty-state">Could not load seller applications: ${esc(res.error.message)}</div>`; return; }
+    cachedSellerApps = uniqueLatestByUser(res.data || []);
+    cachedProfiles = await loadProfiles([...new Set(cachedSellerApps.map(a=>a.user_id).filter(Boolean))]);
+    const pending = cachedSellerApps.filter(a=>(a.status||'pending')==='pending').length;
+    const approved = cachedSellerApps.filter(a=>a.status==='approved').length;
+    const rejected = cachedSellerApps.filter(a=>a.status==='rejected').length;
+    const set = (id,v)=>{ const el=qs(id); if(el) el.textContent=String(v); };
+    set('#sellerPendingCount', pending); set('#sellerApprovedCount', approved); set('#sellerRejectedCount', rejected); set('#mSellers', pending);
+    const deskStatus = qs('#sellerDeskStatus'); if(deskStatus) deskStatus.textContent = `${cachedSellerApps.length} total`;
+
+    const rows = sellerFilter === 'all' ? cachedSellerApps : cachedSellerApps.filter(a=>(a.status||'pending')===sellerFilter);
+    if(list) list.innerHTML = rows.map(applicationCard).join('') || `<div class="empty-state">No ${esc(sellerFilter)} seller applications.</div>`;
+
+    // Admin dashboard preview only shows pending items, so approved ones do not clutter the main control room.
+    if(mini){
+      const pRows = cachedSellerApps.filter(a=>(a.status||'pending')==='pending');
+      mini.innerHTML = pRows.slice(0,5).map(applicationCard).join('') || '<div class="empty-state">No pending seller applications.</div>';
+    }
+    document.querySelectorAll('[data-seller-filter]').forEach(b=>b.classList.toggle('active',(b.dataset.sellerFilter||'pending')===sellerFilter));
   };
 
-  window.approveSellerApplication = async function(id){
-    const {data:app,error:e1} = await sb.from('seller_applications').select('*').eq('id', id).maybeSingle();
-    if(e1 || !app) return say('Application not found.');
-    const {error:e2} = await sb.from('profiles').update({is_seller:true, seller_status:'approved', is_verified:true, account_status:'approved'}).eq('id', app.user_id);
-    if(e2) return say('Profile update failed: ' + e2.message);
-    const {error:e3} = await sb.from('seller_applications').update({status:'approved', reviewed_at:new Date().toISOString()}).eq('id', id);
-    if(e3) return say('Application update failed: ' + e3.message);
-    say('Seller approved.'); window.renderSellerReview?.();
-  };
-
-  window.rejectSellerApplication = async function(id){
-    const {data:app} = await sb.from('seller_applications').select('*').eq('id', id).maybeSingle().then(undefined,()=>({data:null}));
-    const {error} = await sb.from('seller_applications').update({status:'rejected', reviewed_at:new Date().toISOString()}).eq('id', id);
-    if(error) return say('Reject failed: ' + error.message);
-    if(app?.user_id) await sb.from('profiles').update({seller_status:'rejected', is_seller:false}).eq('id', app.user_id).then(undefined,()=>{});
-    say('Seller rejected.'); window.renderSellerReview?.();
-  };
-
-  const oldSwitchTrust = window.switchView;
-  if(oldSwitchTrust){
-    window.switchView = function(id){ oldSwitchTrust(id); if(id==='account' || id==='home') setTimeout(renderVerificationCenter,120); if(id==='admin' || id==='sellerReview' || id==='seller-review') setTimeout(()=>window.renderSellerReview?.(),120); };
-    try { switchView = window.switchView; } catch{}
+  async function setAppStatus(id, status){
+    const app = cachedSellerApps.find(x=>x.id===id) || (await sb.from('seller_applications').select('*').eq('id',id).maybeSingle()).data;
+    if(!app) throw new Error('Application not found');
+    const now = new Date().toISOString();
+    const appUpdate = await sb.from('seller_applications').update({status, reviewed_at: now}).eq('id', id);
+    if(appUpdate.error) throw appUpdate.error;
+    const profileUpdate = status === 'approved'
+      ? {is_seller:true, seller_status:'approved', account_status:'approved'}
+      : status === 'rejected'
+        ? {is_seller:false, seller_status:'rejected'}
+        : {is_seller:false, seller_status:'pending'};
+    await sb.from('profiles').update(profileUpdate).eq('id', app.user_id).then(()=>{}).catch?.(()=>{});
+    try{ await sb.from('notifications').insert({user_id:app.user_id, type:`seller_${status}`, content:`Your seller application is ${status}.`}); }catch{}
   }
 
+  window.approveSellerFinal = async function(id){ try{ await setAppStatus(id,'approved'); notify('Seller approved.'); await window.renderSellerReview(); }catch(e){ notify('Could not approve seller: '+(e?.message||e)); } };
+  window.rejectSellerFinal = async function(id){ try{ await setAppStatus(id,'rejected'); notify('Seller rejected.'); await window.renderSellerReview(); }catch(e){ notify('Could not reject seller: '+(e?.message||e)); } };
+  window.unapproveSellerFinal = async function(id){ try{ await setAppStatus(id,'pending'); notify('Seller moved back to pending.'); sellerFilter='pending'; await window.renderSellerReview(); }catch(e){ notify('Could not unapprove seller: '+(e?.message||e)); } };
+  window.reopenSellerFinal = async function(id){ return window.unapproveSellerFinal(id); };
+  window.adminSeller = (id,status)=> status==='approved' ? window.approveSellerFinal(id) : window.rejectSellerFinal(id);
+  window.adminApproveSeller = window.approveSellerFinal;
+  window.adminRejectSeller = window.rejectSellerFinal;
+
+  window.viewSellerDetailsFinal = async function(id){
+    const app = cachedSellerApps.find(x=>x.id===id) || (await sb.from('seller_applications').select('*').eq('id',id).maybeSingle()).data;
+    if(!app) return notify('Application not found');
+    const p = cachedProfiles[app.user_id] || (await sb.from('profiles').select('*').eq('id',app.user_id).maybeSingle().then(r=>r.data).catch(()=>({}))) || {};
+    const c = await getActivityCounts(app.user_id);
+    const html = `<div class="stackops-modal-backdrop" onclick="this.remove()"><div class="stackops-modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="this.closest('.stackops-modal-backdrop').remove()">×</button>
+      <h2>Seller Account Details</h2>
+      <p><b>Name:</b> ${esc(p.display_name||p.username||app.applicant_name||'Unknown')}</p>
+      <p><b>Email:</b> ${esc(app.applicant_email||'')}</p>
+      <p><b>User ID:</b> <code>${esc(app.user_id||'')}</code></p>
+      <p><b>Status:</b> ${esc(app.status||'pending')}</p>
+      <p><b>Profile:</b> ${p.is_verified?'verified':'unverified'} · ${p.is_banned?'banned':'active'} · ${p.role||'user'}</p>
+      <p><b>Activity:</b> ${c.posts} posts · ${c.chats} chats · ${c.teams} teams</p>
+      <p><b>Note:</b> ${esc(app.note||'')}</p>
+      <div class="seller-actions"><button class="btn primary" onclick="approveSellerFinal('${app.id}'); this.closest('.stackops-modal-backdrop').remove();">Approve</button><button class="btn dark" onclick="unapproveSellerFinal('${app.id}'); this.closest('.stackops-modal-backdrop').remove();">Unapprove</button><button class="btn danger" onclick="rejectSellerFinal('${app.id}'); this.closest('.stackops-modal-backdrop').remove();">Reject</button></div>
+    </div></div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  };
+
+  document.addEventListener('click', (e)=>{
+    const filterBtn = e.target.closest('[data-seller-filter]');
+    if(filterBtn){ sellerFilter = filterBtn.dataset.sellerFilter || 'pending'; window.renderSellerReview(); }
+    if(e.target.closest('#refreshSellerDesk')) window.renderSellerReview();
+    if(e.target.closest('#applySellerBtn')){ e.preventDefault(); window.applySeller(); }
+  }, true);
+
+  const oldSwitch = window.switchView || (typeof switchView !== 'undefined' ? switchView : null);
+  if(oldSwitch){
+    window.switchView = function(id){ oldSwitch(id); if(id==='sellerReview' || id==='admin') setTimeout(()=>window.renderSellerReview(),120); };
+    try{ switchView = window.switchView; }catch{}
+  }
   document.addEventListener('DOMContentLoaded', ()=>{
-    ensureSellerProofModal();
-    renderVerificationCenter();
-    const b = q('#applySellerBtn'); if(b) b.onclick = window.applySeller;
-    document.addEventListener('click', (e)=>{ if(e.target?.closest?.('#applySellerBtn')){ e.preventDefault(); window.applySeller(); } }, true);
-    if(sb?.channel){
-      try{ sb.channel('trust_seller_live').on('postgres_changes',{event:'*',schema:'public',table:'seller_applications'},()=>window.renderSellerReview?.()).subscribe(); }catch{}
-    }
+    setTimeout(()=>window.renderSellerReview?.(), 900);
+    try{ sb?.channel('seller_desk_final_status').on('postgres_changes',{event:'*',schema:'public',table:'seller_applications'},()=>window.renderSellerReview()).subscribe(); }catch{}
   });
 })();
