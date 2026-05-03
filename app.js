@@ -9,23 +9,9 @@ let voiceJoined = false;
 const adminEmails = (cfg.ADMIN_EMAILS || []).map((e) => e.toLowerCase());
 
 const demo = {
-  teams: [
-    { id:'t1', name:'Immortal Scrim', game:'Valorant', region:'Mumbai', rank:'Immortal+', description:'Need Duelist + Smokes. Serious comms only.', owner_id:'demo' },
-    { id:'t2', name:'Clash Flex', game:'League of Legends', region:'EUW', rank:'Gold+', description:'Jungle + Mid needed for weekly Clash.', owner_id:'demo' },
-    { id:'t3', name:'TFT Lab', game:'Teamfight Tactics', region:'SEA', rank:'Diamond+', description:'Comp testing, chill voice, no toxicity.', owner_id:'demo' },
-    { id:'t4', name:'Premier Tryouts', game:'Valorant', region:'Singapore', rank:'Ascendant+', description:'Looking for sentinel and IGL.', owner_id:'demo' }
-  ],
-  posts: [
-    { id:'p1', username:'RazeMain', content:'Need Premier 5 stack tonight. Mumbai server. Drop role + rank.', image_url:'', created_at:new Date().toISOString() },
-    { id:'p2', username:'CoachByte', content:'Opened 3 VOD review slots. First 10 minutes free for StackOps users.', image_url:'', created_at:new Date().toISOString() },
-    { id:'p3', username:'StackOps', content:'New collectible banner unlocked: Crownline Protocol.', image_url:'', created_at:new Date().toISOString() }
-  ],
-  services: [
-    { title:'Valorant Aim Coaching', description:'1 hour aim routine + VOD notes', price_inr:399, status:'approved' },
-    { title:'Duo Rank Strategy', description:'Macro, agent pool and comm review', price_inr:999, status:'approved' },
-    { title:'Team Scrim Analysis', description:'Full team VOD review + PDF plan', price_inr:2499, status:'approved' },
-    { title:'Pro Trial Bootcamp', description:'3-day structured improvement plan', price_inr:5999, status:'approved' }
-  ],
+  teams: [],
+  posts: [],
+  services: [],
   plans: [
     { key:'free', name:'Free', price_inr:0, desc:'Starter profile, squads, community and basic rewards' },
     { key:'bronze', name:'Bronze', price_inr:199, desc:'Starter premium badge + small profile boost' },
