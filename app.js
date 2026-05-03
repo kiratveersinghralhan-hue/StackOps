@@ -677,3 +677,255 @@ window.joinTeam = function(name){ __oldJoinTeam(name); if(session && !isAdmin())
 processReferral();
 
 document.addEventListener('DOMContentLoaded', init);
+
+/* === StackOps Growth Command Final Patch === */
+(function(){
+  const liveFallback = [
+    {kind:'join', text:'New player joined the arena', user:'RazeMain'},
+    {kind:'unlock', text:'Unlocked Redline Protocol banner', user:'VandalMind'},
+    {kind:'team', text:'Created a public squad for Valorant', user:'ClutchRift'},
+    {kind:'seller', text:'Coach application is pending review', user:'CoachByte'},
+    {kind:'voice', text:'Entered a voice room', user:'SageOps'}
+  ];
+  let liveEvents = JSON.parse(localStorage.stackopsLiveEvents || '[]');
+  let lastShownXP = null;
+
+  function safeNum(n){ return Number(n || 0); }
+  function pulse(el){ if(!el) return; el.classList.remove('counter-pulse'); void el.offsetWidth; el.classList.add('counter-pulse'); }
+  function xpDelta(amount){
+    const delta = Number(amount || 0); if(!delta) return;
+    const el = document.createElement('div');
+    el.className = 'xp-float' + (delta < 0 ? ' neg' : '');
+    el.textContent = `${delta > 0 ? '+' : ''}${delta} XP`;
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(), 1250);
+  }
+  function animateNumber(el, from, to, suffix=''){
+    if(!el) return; from = safeNum(from); to = safeNum(to);
+    const start = performance.now(); const dur = 520;
+    function frame(t){
+      const p = Math.min(1, (t-start)/dur); const eased = 1 - Math.pow(1-p, 3);
+      el.textContent = Math.round(from + (to-from)*eased).toLocaleString('en-IN') + suffix;
+      if(p < 1) requestAnimationFrame(frame); else pulse(el);
+    }
+    requestAnimationFrame(frame);
+  }
+  function addLiveEvent(text, user, kind='activity'){
+    const ev = { text, user:user || me?.username || 'Player', kind, created_at:new Date().toISOString() };
+    liveEvents.unshift(ev); liveEvents = liveEvents.slice(0, 18);
+    localStorage.stackopsLiveEvents = JSON.stringify(liveEvents);
+    renderLiveCenter();
+    if(sb) sb.from('live_activity').insert({ user_id: session?.user?.id || null, username: ev.user, type:kind, content:text }).catch(()=>{});
+  }
+  window.addLiveEvent = addLiveEvent;
+
+  function ensureLiveCenter(){
+    const lobby = $('#lobby'); if(!lobby || $('#homeLiveCenter')) return;
+    const anchor = lobby.querySelector('.dash-grid');
+    const section = document.createElement('section');
+    section.id = 'homeLiveCenter'; section.className = 'live-center reveal';
+    section.innerHTML = `<div class="panel-head"><h2><span class="activity-dot"></span>Live Arena Center</h2><span class="chip" id="trueLiveChip">Realtime</span></div><div class="activity-rail" id="homeActivityRail"></div>`;
+    if(anchor) anchor.parentNode.insertBefore(section, anchor); else lobby.appendChild(section);
+  }
+  function renderLiveCenter(){
+    ensureLiveCenter();
+    const rail = $('#homeActivityRail'); if(!rail) return;
+    const rows = [...liveEvents, ...liveFallback].slice(0, 12);
+    rail.innerHTML = rows.map(ev => `<div class="activity-pill"><b>@${escapeHtml(ev.user || 'Player')}</b><span>${escapeHtml(ev.text || ev.content || 'Joined StackOps')}</span><small>${new Date(ev.created_at || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small></div>`).join('');
+  }
+
+  async function refreshTrueCounters(){
+    const onlineEl = $('#onlineCounter');
+    let players = 2428 + Math.floor(Math.random()*18);
+    let teams = JSON.parse(localStorage.stackopsTeams || '[]').length + (demo?.teams?.length || 0);
+    let posts = JSON.parse(localStorage.stackopsPosts || '[]').length + (demo?.posts?.length || 0);
+    let sellers = 0;
+    if(sb){
+      const [p,t,po,s] = await Promise.all([
+        sb.from('profiles').select('id', { count:'exact', head:true }).catch(()=>({count:null})),
+        sb.from('teams').select('id', { count:'exact', head:true }).catch(()=>({count:null})),
+        sb.from('posts').select('id', { count:'exact', head:true }).catch(()=>({count:null})),
+        sb.from('seller_applications').select('id', { count:'exact', head:true }).catch(()=>({count:null}))
+      ]);
+      if(p.count != null) players = Math.max(players, p.count + 2400);
+      if(t.count != null) teams = t.count;
+      if(po.count != null) posts = po.count;
+      if(s.count != null) sellers = s.count;
+    }
+    if(onlineEl) onlineEl.textContent = players.toLocaleString('en-IN') + ' players online';
+    const hotSpan = [...document.querySelectorAll('.status-tape span')];
+    if(hotSpan[1]) hotSpan[1].textContent = `${teams || 0} squads`;
+    if(hotSpan[2]) hotSpan[2].textContent = `${Math.max(8, sellers || 0)} coaches`;
+    pulse(onlineEl);
+  }
+
+  const oldUpdateProfileUI = updateProfileUI;
+  updateProfileUI = function(){
+    const before = lastShownXP;
+    oldUpdateProfileUI();
+    const now = playerXP();
+    if(before !== null && now !== before) xpDelta(now - before);
+    lastShownXP = now;
+    const xpEl = $('#xpCounter');
+    if(xpEl) animateNumber(xpEl, Number((xpEl.textContent || '0').replace(/,/g,'')), now);
+    const fill = $('#levelFill'); if(fill && !isAdmin()) fill.style.width = Math.min(100, Math.round((now % 1000) / 10)) + '%';
+    renderChallengeTracker();
+  };
+
+  const oldAwardXP = awardXP;
+  awardXP = async function(xp, reason='XP earned'){
+    const before = playerXP();
+    await oldAwardXP(xp, reason);
+    const after = playerXP();
+    if(after !== before) { xpDelta(after-before); addLiveEvent(`${reason} (${after>before?'+':''}${after-before} XP)`, me?.username || me?.display_name || 'Player', 'xp'); }
+    renderChallengeTracker();
+  };
+
+  function renderChallengeTracker(){
+    const box = $('#questList'); if(!box) return;
+    const xp = playerXP();
+    const quests = [
+      {name:'Complete profile', xp:100, target:'Add display name, Riot ID and bio', pct: me?.riot_id && me?.bio ? 100 : 35, action:'account'},
+      {name:'Create or join a team', xp:80, target:'Find squad or create your own', pct: Math.min(100, (JSON.parse(localStorage.stackopsTeams||'[]').length)*100), action:'teams'},
+      {name:'Publish one community post', xp:60, target:'Post LFT, clip, win or update', pct: JSON.parse(localStorage.stackopsPosts||'[]').length ? 100 : 0, action:'community'},
+      {name:'Enter a voice room', xp:40, target:'Join voice preview room', pct: localStorage.stackopsVoiceJoined ? 100 : 0, action:'chat'},
+      {name:'Apply as seller', xp:150, target:'Admin approval unlocks coaching sales', pct: localStorage.stackopsSellerApplied ? 100 : 0, action:'market'},
+      {name:'Invite a teammate', xp:120, target:'Copy invite and bring one player', pct: Math.min(100, getInviteCount()*100), action:'lobby'}
+    ];
+    box.innerHTML = quests.map(q => `<div class="quest"><div><b>${q.name} <span>+${q.xp} XP</span></b><small>${q.target}</small><div class="progress-track"><i style="width:${q.pct}%"></i></div></div><button class="mini" onclick="window.questAction('${q.action}',${q.xp},'${q.name.replace(/'/g,"\\'")}')">${q.pct>=100?'Claim':'Start'}</button></div>`).join('');
+  }
+  window.questAction = async (view, xp, name) => { if(view) switchView(view); if(!session) return; if(name === 'Enter a voice room') localStorage.stackopsVoiceJoined = '1'; if(name === 'Apply as seller' && localStorage.stackopsSellerApplied) await awardXP(xp, name); else if(name === 'Complete profile' && me?.riot_id && me?.bio) await awardXP(xp, name); else toast('Complete the action first, then claim XP.'); };
+  renderQuests = renderChallengeTracker;
+
+  const oldRenderRetention = renderRetention;
+  renderRetention = function(){
+    oldRenderRetention();
+    const h = document.querySelector('.invite-panel .panel-head h2'); if(h) h.innerHTML = '<span class="growth-title">Growth Network</span>';
+    const tag = document.querySelector('.invite-panel .panel-head .chip'); if(tag) tag.textContent = 'Recruit rewards';
+    const p = document.querySelector('.invite-panel .muted'); if(p) p.textContent = 'Recruit teammates, climb reputation boards and unlock rare identity collectibles.';
+    const mil = $('#inviteMilestones');
+    if(mil){
+      const inv = getInviteCount();
+      mil.innerHTML = retention.inviteMilestones.map(m=>`<div class="milestone ${inv>=m.count?'done':''}"><div><b>${m.count} recruit${m.count>1?'s':''}</b><small>${m.reward} · ${m.xp} XP reward</small></div><span class="chip">${Math.min(inv,m.count)}/${m.count}</span></div>`).join('');
+    }
+    renderChallengeTracker();
+  };
+
+  const oldRenderPosts = renderPosts;
+  renderPosts = function(){
+    const local = JSON.parse(localStorage.stackopsPosts || '[]');
+    const posts = [...local, ...demo.posts.map((p,i)=>({...p, id:'demo-'+i, demo:true}))];
+    const mini = $('#miniFeed');
+    if(mini) mini.innerHTML = posts.slice(0,4).map(p => `<div class="feed-item"><b>@${escapeHtml(p.username || 'player')}</b><br>${escapeHtml(p.content)}<div class="feed-actions"><button class="mini nav" data-view="community">Open</button><button class="mini" onclick="switchView('teams')">Invite squad</button></div></div>`).join('');
+    const list = $('#postList');
+    if(list) list.innerHTML = posts.map(p => {
+      const mine = !p.demo && (p.user_id === session?.user?.id || p.local || !p.user_id);
+      return `<article class="post-card"><b>@${escapeHtml(p.username || 'player')}</b><small>${new Date(p.created_at || Date.now()).toLocaleString()}</small>${p.image_url ? `<img src="${p.image_url}" alt="Post image" style="width:100%;border-radius:16px;margin:12px 0;max-height:360px;object-fit:cover">` : ''}<p>${escapeHtml(p.content)}</p><div class="post-actions"><button class="mini" onclick="toast('GG sent')">GG</button><button class="mini" onclick="switchView('chat')">Join discussion</button><button class="mini" onclick="switchView('teams')">Invite</button>${mine ? `<button class="mini danger" onclick="deletePost('${p.id}')">Delete</button>` : ''}</div></article>`;
+    }).join('');
+  };
+  window.deletePost = async function(id){
+    const local = JSON.parse(localStorage.stackopsPosts || '[]');
+    localStorage.stackopsPosts = JSON.stringify(local.filter(p => p.id !== id));
+    if(sb && !String(id).startsWith('demo-')) await sb.from('posts').delete().eq('id', id).catch(()=>{});
+    renderPosts(); addLiveEvent('Deleted a community post', me?.username || 'Player', 'post'); toast('Post deleted');
+  };
+
+  const oldCreatePost2 = createPost;
+  createPost = async function(){
+    const before = JSON.parse(localStorage.stackopsPosts || '[]').length;
+    await oldCreatePost2();
+    const after = JSON.parse(localStorage.stackopsPosts || '[]').length;
+    if(after > before) addLiveEvent('Published a community post', me?.username || me?.display_name || 'Player', 'post');
+  };
+
+  const oldApplySeller = applySeller;
+  applySeller = async function(){
+    if(needLogin()) return;
+    if(isAdmin()){ switchView('admin'); toast('Founder accounts approve sellers here. Use a normal account to test seller application.'); return; }
+    localStorage.stackopsSellerApplied = '1';
+    await oldApplySeller();
+    addLiveEvent('Submitted seller application', me?.username || 'Player', 'seller');
+  };
+
+  function getServers(){
+    const base = [
+      {id:'global', name:'Global Arena', visibility:'public', channel:'global'},
+      {id:'valorant', name:'Valorant Scrims', visibility:'public', channel:'valorant'},
+      {id:'marketplace', name:'Coach Market', visibility:'public', channel:'marketplace'},
+      {id:'team-room', name:'Team Room', visibility:'private', channel:'team-room'}
+    ];
+    const custom = JSON.parse(localStorage.stackopsServers || '[]');
+    return [...custom, ...base];
+  }
+  function renderDiscordServers(){
+    const side = document.querySelector('.chat-sidebar'); if(!side) return;
+    if(!$('#serverTools')){
+      side.insertAdjacentHTML('afterbegin', `<h3>Servers</h3><div class="server-tools" id="serverTools"><input id="serverNameInput" placeholder="Create server"><select id="serverVis"><option value="public">Public</option><option value="private">Private</option></select><button class="mini" id="createServerBtn">Create</button></div><div class="server-list" id="serverList"></div>`);
+      $('#createServerBtn').onclick = createServer;
+    }
+    const list = $('#serverList'); if(!list) return;
+    list.innerHTML = getServers().map(s => `<button class="server-card ${currentChannel===s.channel?'active':''}" onclick="selectServer('${s.channel}')"><b>${s.visibility==='private'?'🔒':'🌐'} ${escapeHtml(s.name)}</b><small>${s.visibility} · share ${location.origin}${location.pathname}?server=${s.channel}</small></button>`).join('');
+  }
+  window.selectServer = function(channel){ setChannel(channel); renderDiscordServers(); };
+  async function createServer(){
+    if(needLogin()) return;
+    const name = ($('#serverNameInput')?.value || '').trim(); if(!name) return toast('Enter server name');
+    const visibility = $('#serverVis')?.value || 'public';
+    const id = 'srv-' + Date.now(); const channel = id;
+    const server = {id, name, visibility, channel, owner_id:session.user.id};
+    const arr = JSON.parse(localStorage.stackopsServers || '[]'); arr.unshift(server); localStorage.stackopsServers = JSON.stringify(arr);
+    if(sb) await sb.from('chat_servers').insert({id, owner_id:session.user.id, name, visibility, invite_code:id}).catch(()=>{});
+    $('#serverNameInput').value = ''; renderDiscordServers(); selectServer(channel); addLiveEvent(`Created ${visibility} server: ${name}`, me?.username || 'Player', 'server'); toast('Server created');
+  }
+  const oldSetChannel = setChannel;
+  setChannel = function(channel){ oldSetChannel(channel); renderDiscordServers(); };
+  const oldLoadMessages = loadMessages;
+  loadMessages = async function(){ await oldLoadMessages(); renderDiscordServers(); renderVoiceRooms(); };
+  function renderVoiceRooms(){
+    const main = document.querySelector('.chat-main'); if(!main || $('#voiceRoomGrid')) return;
+    const head = document.querySelector('.chat-head');
+    head?.insertAdjacentHTML('afterend', `<div class="voice-room-grid" id="voiceRoomGrid"><button class="voice-tile" onclick="joinVoiceRoom('Lobby VC')"><b>Lobby VC</b><small>Public voice · 12 online</small></button><button class="voice-tile" onclick="joinVoiceRoom('Team VC')"><b>Team VC</b><small>Private squad voice</small></button></div>`);
+  }
+  window.joinVoiceRoom = function(name){ if(needLogin()) return; localStorage.stackopsVoiceJoined='1'; joinVoice(); $('#voiceStatus').textContent = `Connected to ${name}`; addLiveEvent(`Joined ${name}`, me?.username || 'Player', 'voice'); };
+
+  const oldRenderAdmin = renderAdmin;
+  renderAdmin = async function(){
+    if(!isAdmin()) return;
+    const grid = document.querySelector('.admin-grid');
+    if(grid && !$('#adminMetrics')) grid.insertAdjacentHTML('afterbegin', `<section class="panel" style="grid-column:1/-1"><div class="admin-metrics" id="adminMetrics"><div class="metric"><b id="mUsers">0</b><span>Users</span></div><div class="metric"><b id="mSellers">0</b><span>Seller apps</span></div><div class="metric"><b id="mPosts">0</b><span>Posts</span></div><div class="metric"><b id="mRevenue">₹0</b><span>Tracked revenue</span></div></div><h2>Live Control Feed</h2><div id="adminLiveFeed"></div></section>`);
+    if(!sb){ await oldRenderAdmin(); renderAdminFallback(); return; }
+    const [users,sellers,posts,payments] = await Promise.all([
+      sb.from('profiles').select('id,username,role,account_status,is_banned,is_verified,created_at').order('created_at',{ascending:false}).limit(30).catch(()=>({data:[]})),
+      sb.from('seller_applications').select('*').order('created_at',{ascending:false}).limit(30).catch(()=>({data:[]})),
+      sb.from('posts').select('id', {count:'exact', head:true}).catch(()=>({count:0})),
+      sb.from('payments').select('amount_inr').catch(()=>({data:[]}))
+    ]);
+    const userRows = users.data || []; const sellerRows = sellers.data || [];
+    $('#mUsers') && ($('#mUsers').textContent = userRows.length);
+    $('#mSellers') && ($('#mSellers').textContent = sellerRows.filter(s=>s.status==='pending').length);
+    $('#mPosts') && ($('#mPosts').textContent = posts.count || 0);
+    const rev = (payments.data || []).reduce((a,x)=>a+Number(x.amount_inr||0),0); $('#mRevenue') && ($('#mRevenue').textContent = money(rev));
+    $('#adminUsers').innerHTML = userRows.map(u => `<div class="user-row"><b>${escapeHtml(u.username || u.id.slice(0,8))}</b><small>${u.role || 'user'} · ${u.account_status || 'approved'} · ${u.is_banned?'banned':'active'} · ${u.is_verified?'verified':'unverified'}</small><button class="mini" onclick="adminUpdateUser('${u.id}','approved')">Approve</button><button class="mini" onclick="adminBan('${u.id}',${!u.is_banned})">${u.is_banned?'Unban':'Ban'}</button><button class="mini" onclick="adminVerify('${u.id}')">Verify</button></div>`).join('') || 'No users yet';
+    $('#adminSellers').innerHTML = sellerRows.map(s => `<div class="user-row"><b>${escapeHtml(s.user_id?.slice(0,8) || 'seller')}</b><small>${s.status || 'pending'} · ${new Date(s.created_at || Date.now()).toLocaleString()}</small><button class="mini" onclick="adminSeller('${s.id}','approved')">Approve</button><button class="mini danger" onclick="adminSeller('${s.id}','rejected')">Reject</button></div>`).join('') || 'No seller applications';
+    const feed = $('#adminLiveFeed'); if(feed){
+      const rows = [...liveEvents, ...liveFallback].slice(0,8);
+      feed.innerHTML = rows.map(x=>`<div class="admin-live-row"><div><b>${escapeHtml(x.user || 'Player')}</b><small>${escapeHtml(x.text || x.content || 'activity')}</small></div><span class="chip">${escapeHtml(x.kind || x.type || 'live')}</span></div>`).join('');
+    }
+  };
+  function renderAdminFallback(){ const f=$('#adminLiveFeed'); if(f) f.innerHTML=liveFallback.map(x=>`<div class="admin-live-row"><div><b>${x.user}</b><small>${x.text}</small></div><span class="chip">demo</span></div>`).join(''); }
+
+  const oldSubscribe = subscribeRealtime;
+  subscribeRealtime = function(){
+    oldSubscribe(); if(!sb) return;
+    sb.channel('stackops-growth-live')
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'profiles'}, p => { addLiveEvent('Joined StackOps', p.new.username || 'NewPlayer', 'join'); refreshTrueCounters(); })
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'posts'}, p => { addLiveEvent('Published a community post', 'Community', 'post'); refreshTrueCounters(); renderPosts(); })
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'seller_applications'}, p => { addLiveEvent('Seller application received', p.new.user_id?.slice(0,8) || 'Seller', 'seller'); refreshTrueCounters(); renderAdmin(); })
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'live_activity'}, p => { liveEvents.unshift({user:p.new.username, text:p.new.content, kind:p.new.type, created_at:p.new.created_at}); liveEvents=liveEvents.slice(0,18); renderLiveCenter(); renderAdmin(); })
+      .subscribe();
+  };
+
+  const oldRenderAll2 = renderAll;
+  renderAll = function(){ oldRenderAll2(); renderLiveCenter(); renderDiscordServers(); renderVoiceRooms(); refreshTrueCounters(); };
+  document.addEventListener('DOMContentLoaded', () => { setTimeout(()=>{ renderLiveCenter(); renderDiscordServers(); renderChallengeTracker(); refreshTrueCounters(); setInterval(refreshTrueCounters, 12000); }, 900); });
+})();
