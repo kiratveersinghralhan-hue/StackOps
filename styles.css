@@ -29,3 +29,73 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;bac
 /* === StackOps Retention Upgrade === */
 .muted{color:var(--muted)}
 .retention-grid{display:grid;grid-template-columns:1.1fr .75fr .9fr;gap:18px;margin-top:18px}.invite-box{display:grid;grid-template-columns:1fr auto;gap:10px;margin:15px 0}.milestones{display:grid;gap:10px}.milestone{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:16px;padding:12px}.milestone b{color:var(--soft)}.milestone.done{border-color:rgba(60,245,154,.45);background:rgba(60,245,154,.06)}.daily-ring{min-height:150px;border-radius:28px;border:1px solid rgba(255,70,85,.35);display:grid;place-items:center;margin:18px 0;background:radial-gradient(circle,rgba(255,70,85,.18),transparent 68%),rgba(255,255,255,.035);position:relative;overflow:hidden}.daily-ring:before{content:"";position:absolute;inset:-50%;background:conic-gradient(from 90deg,transparent,rgba(255,70,85,.28),transparent 32%);animation:spinSlow 6s linear infinite}.daily-ring b,.daily-ring span{position:relative}.daily-ring b{font-size:34px}.daily-ring span{color:var(--muted);font-weight:800}.leaderboard-list{display:grid;gap:10px}.leader-row{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:10px;border:1px solid var(--line);border-radius:16px;padding:12px;background:rgba(255,255,255,.04)}.leader-row:first-child{border-color:rgba(255,209,102,.5);box-shadow:0 0 30px rgba(255,209,102,.08)}.leader-rank{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,var(--red),#111);font-weight:900}.next-unlock{display:grid;gap:12px}.unlock-card{border:1px solid var(--line);border-radius:20px;padding:18px;background:rgba(255,255,255,.045)}.unlock-card h3{margin:0 0 6px}.progress-track{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:12px}.progress-track i{display:block;height:100%;background:linear-gradient(90deg,var(--red),var(--gold));transition:.6s}.growth-panel{min-height:220px}.reward-layout .growth-panel{grid-column:auto}.panel,.profile-card{will-change:transform}.hero-copy h1 span{animation:valorantPulse 3.2s ease-in-out infinite}.btn.primary{position:relative;overflow:hidden}.btn.primary:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);transform:translateX(-120%)}.btn.primary:hover:after{animation:sheenBtn .8s ease}@keyframes sheenBtn{to{transform:translateX(120%)}}@keyframes spinSlow{to{transform:rotate(360deg)}}@keyframes valorantPulse{0%,100%{text-shadow:0 0 18px rgba(255,70,85,.12)}50%{text-shadow:0 0 34px rgba(255,70,85,.38)}}.confetti{position:fixed;inset:0;pointer-events:none;z-index:500}.confetti i{position:absolute;width:8px;height:12px;background:var(--red);top:-20px;animation:fall 900ms ease-in forwards}.confetti i:nth-child(2n){background:var(--gold)}.confetti i:nth-child(3n){background:var(--cyan)}@keyframes fall{to{transform:translateY(110vh) rotate(680deg);opacity:.2}}@media(max-width:980px){.retention-grid{grid-template-columns:1fr 1fr}.leaderboard-panel{grid-column:1/-1}.reward-layout .growth-panel{grid-column:1/-1}}@media(max-width:620px){.retention-grid,.invite-box{grid-template-columns:1fr}.daily-ring{min-height:120px}.daily-ring b{font-size:28px}.leader-row{grid-template-columns:34px 1fr}.leader-row .chip{grid-column:2}.growth-panel{min-height:unset}}
+
+/* Luxury StackOps logo + intro animation */
+.logo-mark,
+.logo-sigil{
+  overflow:hidden;
+  background:#050507;
+  border:1px solid rgba(255,209,102,.32);
+  box-shadow:0 0 22px rgba(255,209,102,.18), inset 0 0 18px rgba(255,255,255,.06);
+  position:relative;
+}
+.logo-mark img,
+.logo-sigil img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+  transform:scale(1.28);
+}
+.logo-mark::after,
+.logo-sigil::after{
+  content:"";
+  position:absolute;
+  inset:-60% -30%;
+  background:linear-gradient(115deg, transparent 35%, rgba(255,255,255,.48), transparent 58%);
+  transform:translateX(-130%) rotate(18deg);
+  animation:logoShine 3.8s ease-in-out infinite;
+  pointer-events:none;
+}
+.brand:hover .logo-mark{
+  transform:translateY(-1px) scale(1.04);
+  border-color:rgba(255,209,102,.65);
+  box-shadow:0 0 30px rgba(255,209,102,.28),0 0 18px rgba(255,70,85,.18);
+}
+.logo-sigil{
+  width:112px;
+  height:112px;
+  border-radius:34px;
+  margin:auto;
+  animation:logoIntroPop 1.2s cubic-bezier(.2,.8,.2,1) both, logoFloat 3.2s ease-in-out 1.2s infinite;
+}
+.logo-sigil img{transform:scale(1.18)}
+.boot-card h1{
+  animation:bootTitleIn .9s ease .15s both;
+  background:linear-gradient(90deg,#fff,#ffd166,#fff);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+.boot-card p,.loader{animation:bootTitleIn .9s ease .28s both}
+@keyframes logoShine{
+  0%,48%{transform:translateX(-130%) rotate(18deg)}
+  68%,100%{transform:translateX(135%) rotate(18deg)}
+}
+@keyframes logoIntroPop{
+  0%{opacity:0;transform:scale(.62) rotate(-8deg);filter:blur(10px)}
+  55%{opacity:1;transform:scale(1.07) rotate(1deg);filter:blur(0)}
+  100%{opacity:1;transform:scale(1) rotate(0);filter:blur(0)}
+}
+@keyframes logoFloat{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+@keyframes bootTitleIn{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@media(max-width:620px){
+  .logo-sigil{width:88px;height:88px;border-radius:28px}
+  .logo-mark img{transform:scale(1.35)}
+}
