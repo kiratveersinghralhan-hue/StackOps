@@ -1,38 +1,47 @@
-# StackOps Final Product
+# StackOps Live Ready Final
 
-SQL REQUIRED: NO, if your backend is already set up from the previous StackOps SQL.
+A Riot/Valorant-style gamer social lobby with guest view, login/signup, account customization, teams, community posts, realtime chat UI, voice room UI, marketplace, rewards, badges, titles, banners, and founder/admin controls.
 
-Optional SQL is included in `optional-sql-missing-features.sql` only if you are missing feature tables such as teams, posts, messages, seller_applications, payments, notifications, or storage buckets.
+## SQL REQUIRED: YES
+Run `live-ready-final-migration.sql` once in Supabase SQL Editor.
 
-## Setup
-1. Open `config.js`.
-2. Add your Supabase URL and anon key.
-3. Add Razorpay test key if you want checkout popups.
-4. Deploy all files in this one folder.
+This migration is safe to run multiple times and does not delete your data.
 
 ## Admin Emails
-Configured in `config.js` and SQL:
+Founder/admin access is controlled by email:
 - kiratveersinghralhan@gmail.com
 - qq299629@gmail.com
 
-Admins get Founder identity, Founder banner, crown, and admin console access.
-
-## Features
-- Full-screen game lobby homepage
-- My Account/profile editor
-- Avatar and banner uploads
-- Valorant-style banner collection
-- Collectible titles, badges, rewards
-- Team create/delete/join UI
-- Community posts with image upload
-- Direct + group chat UI
-- Voice room UI preview
-- Marketplace with commission rules
-- Seller application flow
+Admins automatically unlock:
+- Founder title
+- Origin Crown badge
+- Founder Crownline banner
 - Admin console
-- Scroll-to-top button
-- Dark/light mixed theme
-- Mobile responsive layout
+- Crown identity UI
 
-## Important
-Voice chat is a UI layer in this package. Real voice needs a service such as LiveKit, Agora, Daily, or WebRTC signaling backend.
+Regular users start with:
+- Rookie title
+- Starter Spark badge
+- Starter Arena Card banner
+
+Founder/admin rewards are locked for everyone else.
+
+## Razorpay
+Edit `config.js`:
+```js
+RAZORPAY_KEY_ID: 'rzp_test_YOUR_KEY_ID'
+```
+Use test mode first. Switch to `rzp_live_...` only when ready.
+
+For real production money, add server-side payment verification later.
+
+## Files
+- `index.html` — main app
+- `styles.css` — responsive UI + animations
+- `app.js` — frontend logic
+- `config.js` — Supabase/Razorpay/admin config
+- `live-ready-final-migration.sql` — backend migration
+- `GO-LIVE-CHECKLIST.md` — launch steps
+
+## Deploy
+Upload the full folder to any static host.

@@ -26,15 +26,31 @@ const demo = {
     { title:'Team Scrim Analysis', description:'Full team VOD review + PDF plan', price_inr:2499, status:'approved' },
     { title:'Pro Trial Bootcamp', description:'3-day structured improvement plan', price_inr:5999, status:'approved' }
   ],
-  titles: ['Rookie','Clutch Maker','Spike Caller','Aim Architect','Lobby Captain','Radiant Mind','Founder'],
-  badges: ['Starter Spark','Duelist Flame','Strategist Core','Squad Builder','Verified Coach','Origin Crown'],
+  titles: [
+    {name:'Rookie', xp:0, desc:'Default title for every new player'},
+    {name:'Clutch Maker', xp:250, desc:'Complete your first profile and squad action'},
+    {name:'Spike Caller', xp:600, desc:'Create teams and invite players'},
+    {name:'Aim Architect', xp:1200, desc:'Post, chat and complete community quests'},
+    {name:'Lobby Captain', xp:2200, desc:'Build a team presence'},
+    {name:'Radiant Mind', xp:4200, desc:'High trust competitive identity'},
+    {name:'Founder', xp:999999, desc:'Founder only', adminOnly:true}
+  ],
+  badges: [
+    {name:'Starter Spark', xp:0, desc:'Default badge for every new player'},
+    {name:'First Queue', xp:150, desc:'Join your first squad or room'},
+    {name:'Duelist Flame', xp:450, desc:'Active community player'},
+    {name:'Strategist Core', xp:900, desc:'Useful teammate and communicator'},
+    {name:'Squad Builder', xp:1600, desc:'Create teams and help others'},
+    {name:'Verified Coach', xp:3000, desc:'Approved seller or coach'},
+    {name:'Origin Crown', xp:999999, desc:'Founder/admin exclusive', adminOnly:true}
+  ],
   banners: [
-    { key:'default', name:'Default Arena Card', desc:'Clean black/white StackOps card', style:'linear-gradient(135deg,#151922,#30343d)' },
-    { key:'redline', name:'Redline Protocol', desc:'Valorant-inspired red accent', style:'linear-gradient(135deg,#0b0d12,#ff4655 120%)' },
-    { key:'ion', name:'Ion Pulse', desc:'Electric blue premium card', style:'linear-gradient(135deg,#0b0d12,#55f2ff 130%)' },
-    { key:'gold', name:'Crownline', desc:'Founder-grade gold identity', style:'linear-gradient(135deg,#0a0a0c,#ffd166 135%)' },
-    { key:'shadow', name:'Shadow Ops', desc:'Minimal black tactical card', style:'linear-gradient(135deg,#050608,#20242c)' },
-    { key:'rift', name:'Rift Walker', desc:'Riot universe all-games card', style:'linear-gradient(135deg,#14151c,#7b61ff 130%)' }
+    { key:'default', name:'Starter Arena Card', xp:0, desc:'Default banner for every new player', style:'linear-gradient(135deg,#0f1117,#20242c)' },
+    { key:'redline', name:'Redline Protocol', xp:350, desc:'Earn through early quests', style:'linear-gradient(135deg,#07080c 0%,#151922 55%,#ff4655 160%)' },
+    { key:'ion', name:'Ion Pulse', xp:900, desc:'Chat and squad activity reward', style:'linear-gradient(135deg,#07080c 0%,#101820 55%,#55f2ff 160%)' },
+    { key:'shadow', name:'Shadow Ops', xp:1600, desc:'Minimal tactical banner', style:'linear-gradient(135deg,#030406,#111827 70%,#3a3f4b)' },
+    { key:'rift', name:'Rift Walker', xp:2600, desc:'All Riot games identity card', style:'linear-gradient(135deg,#08090f 0%,#171320 60%,#7b61ff 155%)' },
+    { key:'gold', name:'Founder Crownline', xp:999999, desc:'Founder/admin exclusive', adminOnly:true, style:'linear-gradient(135deg,#050507 0%,#15100a 62%,#ffd166 150%)' }
   ]
 };
 
@@ -53,6 +69,9 @@ function commission(amount) {
 }
 function initials(name='OP') { return name.split(/\s|_/).filter(Boolean).slice(0,2).map(x=>x[0]?.toUpperCase()).join('') || 'OP'; }
 function isAdmin() { return !!(me?.role === 'admin' || adminEmails.includes(session?.user?.email?.toLowerCase() || '')); }
+function playerXP() { return isAdmin() ? 9999999 : Number(me?.xp || localStorage.stackopsXP || 0); }
+function isUnlocked(item) { return isAdmin() || (!item.adminOnly && playerXP() >= Number(item.xp || 0)); }
+function defaultProfileFor(email='') { const admin = adminEmails.includes(email.toLowerCase()); return { role: admin ? 'admin' : 'user', title: admin ? 'Founder' : 'Rookie', badge: admin ? 'Origin Crown' : 'Starter Spark', selected_banner_key: admin ? 'gold' : 'default', xp: admin ? 999999 : 0, account_status:'approved', is_verified:admin, is_banned:false }; }
 function needLogin() { if (!session) { $('#authModal').classList.add('active'); toast('Login required for this action'); return true; } return false; }
 
 function initSupabase() {
@@ -66,6 +85,7 @@ async function init() {
   if (localStorage.stackopsLang) $('#languageModal')?.classList.remove('active');
   initSupabase();
   wireUI();
+  initSmoothReveal();
   renderAll();
   animateCounters();
   if (sb) {
@@ -141,11 +161,16 @@ async function loadMe() {
   const email = session.user.email?.toLowerCase() || '';
   let { data } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if (!data) {
-    const profile = { id: session.user.id, username: email.split('@')[0], display_name: email.split('@')[0], role: adminEmails.includes(email) ? 'admin' : 'user', account_status: 'approved', title: adminEmails.includes(email) ? 'Founder' : 'Rookie', badge: adminEmails.includes(email) ? 'Origin Crown' : 'Starter Spark' };
-    await sb.from('profiles').insert(profile);
+    const profile = { id: session.user.id, username: email.split('@')[0], display_name: email.split('@')[0], ...defaultProfileFor(email) };
+    await sb.from('profiles').insert(profile).catch(()=>{});
     data = profile;
   }
-  me = data;
+  me = { ...defaultProfileFor(email), ...data };
+  if (!me.title || !me.badge || !me.selected_banner_key) {
+    const patch = defaultProfileFor(email);
+    await sb.from('profiles').update({ title: me.title || patch.title, badge: me.badge || patch.badge, selected_banner_key: me.selected_banner_key || patch.selected_banner_key, xp: me.xp ?? patch.xp }).eq('id', session.user.id).catch(()=>{});
+    me = { ...patch, ...me };
+  }
   fillAccountForm();
   updateProfileUI();
   renderAdmin();
@@ -264,47 +289,81 @@ async function applySeller() {
 }
 window.buy = (name, amount) => {
   if (needLogin()) return;
-  if (!window.Razorpay || !cfg.RAZORPAY_KEY_ID || cfg.RAZORPAY_KEY_ID.includes('YOUR_')) return toast(`Razorpay test key needed. Demo: ${name} ${money(amount)}`);
+  if (!window.Razorpay || !cfg.RAZORPAY_KEY_ID || cfg.RAZORPAY_KEY_ID.includes('YOUR_')) return toast(`Add Razorpay key in config.js. Demo: ${name} ${money(amount)}`);
   new Razorpay({ key:cfg.RAZORPAY_KEY_ID, amount:amount*100, currency:'INR', name:'StackOps', description:name, handler:async (res)=>{ if(sb) await sb.from('payments').insert({ buyer_id:session.user.id, amount_inr:amount, commission_inr:commission(amount), provider:'razorpay', provider_payment_id:res.razorpay_payment_id, status:'paid' }).catch(()=>{}); toast('Payment success'); }}).open();
 };
 
 function renderRewards() {
-  $('#titleCollection').innerHTML = demo.titles.map(t => rewardCard('title', t, (me?.title||'Rookie') === t)).join('');
-  $('#badgeCollection').innerHTML = demo.badges.map((b,i) => rewardCard('badge', b, i < (isAdmin()?6:2))).join('');
-  const banners = demo.banners.map(b => bannerCard(b, (me?.selected_banner_key || localStorage.stackopsBanner || 'default') === b.key)).join('');
+  const currentTitle = isAdmin() ? (me?.title || 'Founder') : (me?.title || 'Rookie');
+  const currentBadge = isAdmin() ? (me?.badge || 'Origin Crown') : (me?.badge || 'Starter Spark');
+  $('#titleCollection').innerHTML = demo.titles.map(t => rewardCard('title', t, currentTitle === t.name)).join('');
+  $('#badgeCollection').innerHTML = demo.badges.map(b => rewardCard('badge', b, currentBadge === b.name)).join('');
+  const activeKey = (me?.selected_banner_key || localStorage.stackopsBanner || (isAdmin() ? 'gold' : 'default'));
+  const banners = demo.banners.map(b => bannerCard(b, activeKey === b.key)).join('');
   $('#bannerCollection').innerHTML = banners;
   $('#rewardBannerCollection').innerHTML = banners;
 }
-function rewardCard(type, name, unlocked) { return `<button class="reward-card ${unlocked?'equipped':'locked'}" onclick="equipReward('${type}','${name.replace(/'/g,"\\'")}')"><b>${name}</b><small>${unlocked?'Unlocked':'Locked — earn XP'}</small></button>`; }
-function bannerCard(b, active) { return `<button class="banner-card ${active?'active':''}" style="background:${b.style}" onclick="equipBanner('${b.key}')"><b>${b.name}</b><small>${b.desc}</small></button>`; }
+function rewardCard(type, item, equipped) {
+  const unlocked = isUnlocked(item);
+  const founder = item.adminOnly ? ' founder-lock' : '';
+  return `<button class="reward-card ${equipped?'equipped':''} ${unlocked?'':'locked'}${founder}" onclick="equipReward('${type}','${item.name.replace(/'/g,"\\'")}')"><b>${item.name}</b><small>${unlocked ? (equipped?'Equipped':'Unlocked') : (item.adminOnly?'Founder only':`Locked — ${item.xp} XP`)}</small><em>${item.desc || ''}</em></button>`;
+}
+function bannerCard(b, active) {
+  const unlocked = isUnlocked(b);
+  return `<button class="banner-card ${active?'active':''} ${unlocked?'':'locked'} ${b.adminOnly?'founder-lock':''}" style="background:${b.style}" onclick="equipBanner('${b.key}')"><b>${b.name}</b><small>${unlocked ? b.desc : (b.adminOnly ? 'Founder only' : `Unlock at ${b.xp} XP`)}</small></button>`;
+}
 window.equipReward = async (type, name) => {
   if (needLogin()) return;
+  const item = (type === 'title' ? demo.titles : demo.badges).find(x => x.name === name);
+  if (!item || !isUnlocked(item)) return toast(item?.adminOnly ? 'Founder exclusive' : 'Locked — complete quests to unlock');
   const patch = type === 'title' ? { title:name } : { badge:name };
   if (sb) await sb.from('profiles').update(patch).eq('id', session.user.id).catch(()=>{});
   me = { ...me, ...patch }; renderRewards(); updateProfileUI(); toast(`${name} equipped`);
 };
 window.equipBanner = async (key) => {
   if (needLogin()) return;
+  const item = demo.banners.find(x => x.key === key);
+  if (!item || !isUnlocked(item)) return toast(item?.adminOnly ? 'Founder banner is admin only' : 'Banner locked — earn XP first');
   localStorage.stackopsBanner = key;
   if (sb) await sb.from('profiles').update({ selected_banner_key:key }).eq('id', session.user.id).catch(()=>{});
   me = { ...me, selected_banner_key:key }; renderRewards(); updateProfileUI(); toast('Banner equipped');
 };
 function renderAccountPreview() {
   const name = me?.display_name || me?.username || 'Guest Player';
-  $('#accountPreview').innerHTML = `<div class="profile-row"><div class="avatar">${initials(name)}</div><div><h3>${name}</h3><p>${isAdmin()?'Founder':(me?.title||'Rookie')}</p></div>${isAdmin()?'<span class="crown">👑</span>':''}</div><p>${me?.bio || 'No bio yet. Add one from profile settings.'}</p>`;
+  const badge = isAdmin() ? 'Origin Crown' : (me?.badge || 'Starter Spark');
+  const title = isAdmin() ? 'Founder' : (me?.title || 'Rookie');
+  $('#accountPreview').innerHTML = `<div class="profile-row"><div class="avatar">${initials(name)}</div><div><h3>${name}</h3><p>${title} • ${badge}</p><small>${playerXP().toLocaleString()} XP</small></div>${isAdmin()?'<span class="crown">👑</span>':''}</div><p>${me?.bio || 'No bio yet. Add one from profile settings.'}</p>`;
   renderRewards();
 }
 async function equipFounderKit() {
   if (!isAdmin()) return toast('Founder only');
-  const patch = { title:'Founder', badge:'Origin Crown', selected_banner_key:'gold', is_verified:true };
+  const patch = { title:'Founder', badge:'Origin Crown', selected_banner_key:'gold', is_verified:true, xp:999999 };
   if (sb && session) await sb.from('profiles').update(patch).eq('id', session.user.id).catch(()=>{});
   me = { ...me, ...patch }; renderRewards(); updateProfileUI(); toast('Founder kit equipped');
 }
 
 function renderQuests() {
-  const quests = ['Complete profile +100 XP','Create or join a team +80 XP','Publish one community post +60 XP','Enter a voice room +40 XP','Apply as seller +150 XP'];
-  $('#questList').innerHTML = quests.map((q,i)=>`<div class="quest"><b>${q}</b><button class="mini" onclick="toast('Quest tracked')">${i?'Start':'Claim'}</button></div>`).join('');
+  const quests = [
+    {name:'Complete profile', xp:100},
+    {name:'Create or join a team', xp:80},
+    {name:'Publish one community post', xp:60},
+    {name:'Enter a voice room', xp:40},
+    {name:'Apply as seller', xp:150},
+    {name:'Invite a teammate', xp:120}
+  ];
+  $('#questList').innerHTML = quests.map((q,i)=>`<div class="quest"><b>${q.name} <span>+${q.xp} XP</span></b><button class="mini" onclick="claimQuest(${q.xp}, '${q.name.replace(/'/g,"\'")}')">${i?'Start':'Claim'}</button></div>`).join('');
 }
+window.claimQuest = async (xp, name) => {
+  if (needLogin()) return;
+  if (isAdmin()) return toast('Founder has all rewards unlocked');
+  const current = Number(me?.xp || localStorage.stackopsXP || 0);
+  const next = current + Number(xp || 0);
+  localStorage.stackopsXP = next;
+  if (sb) await sb.from('profiles').update({ xp: next }).eq('id', session.user.id).catch(()=>{});
+  me = { ...me, xp: next };
+  renderRewards(); updateProfileUI(); renderAccountPreview();
+  toast(`${name}: +${xp} XP`);
+};
 function setChannel(channel) {
   currentChannel = channel;
   $$('.channel').forEach(c => c.classList.toggle('active', c.dataset.channel === channel));
@@ -356,6 +415,15 @@ window.adminUpdateUser = async (id,status)=>{ await sb.from('profiles').update({
 window.adminBan = async (id,banned)=>{ await sb.from('profiles').update({ is_banned:banned, account_status:banned?'banned':'approved' }).eq('id', id); toast('Ban status updated'); renderAdmin(); };
 window.adminVerify = async (id)=>{ await sb.from('profiles').update({ is_verified:true }).eq('id', id); toast('User verified'); renderAdmin(); };
 window.adminSeller = async (id,status)=>{ await sb.from('seller_applications').update({ status }).eq('id', id); toast('Seller updated'); renderAdmin(); };
+
+function initSmoothReveal() {
+  const reveal = () => $$('.panel,.profile-card,.team-card,.post-card,.service-card,.reward-card,.banner-card').forEach((el,i)=>{
+    if (!el.classList.contains('reveal')) { el.classList.add('reveal'); el.style.transitionDelay = Math.min(i * 18, 180) + 'ms'; }
+  });
+  reveal();
+  const mo = new MutationObserver(reveal);
+  mo.observe(document.body, { childList:true, subtree:true });
+}
 
 function animateCounters() {
   let online = 2429;
