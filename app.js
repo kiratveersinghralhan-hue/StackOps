@@ -92,7 +92,17 @@ async function init() {
     const { data } = await sb.auth.getSession();
     session = data.session;
     if (session) await loadMe();
-    sb.auth.onAuthStateChange(async (_event, s) => { session = s; me = null; if (s) await loadMe(); else updateProfileUI(); });
+    sb.auth.onAuthStateChange(async (_event, s) => {
+      session = s;
+      me = null;
+      if (s) {
+        await loadMe();
+        renderAll();
+      } else {
+        updateProfileUI();
+        renderRewards();
+      }
+    });
     subscribeRealtime();
   } else {
     updateProfileUI();
@@ -141,28 +151,62 @@ async function login() {
   if (!sb) return toast('Add Supabase URL and anon key in config.js');
   const email = $('#email').value.trim();
   const password = $('#password').value;
-  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (!email || !password) return toast('Enter email and password');
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) return toast(error.message);
+
+  // IMPORTANT: update local app state immediately. Some mobile browsers/GitHub Pages
+  // delay the Supabase auth event, which made the UI stay as Guest/Login.
+  session = data.session || (await sb.auth.getSession()).data.session;
+  if (session) await loadMe();
+
   $('#authModal').classList.remove('active');
+  updateProfileUI();
+  renderAll();
   toast('Logged in');
 }
+
 async function signup() {
   if (!sb) return toast('Add Supabase URL and anon key in config.js');
   const email = $('#email').value.trim();
   const password = $('#password').value;
-  const { error } = await sb.auth.signUp({ email, password });
+  if (!email || !password) return toast('Enter email and password');
+  const { data, error } = await sb.auth.signUp({ email, password });
   if (error) return toast(error.message);
-  toast('Signup complete. Check email if confirmation is enabled.');
+
+  // If email confirmation is OFF, Supabase returns a session immediately.
+  session = data.session || (await sb.auth.getSession()).data.session;
+  if (session) {
+    await loadMe();
+    $('#authModal').classList.remove('active');
+    updateProfileUI();
+    renderAll();
+    toast('Signup complete. Logged in.');
+  } else {
+    toast('Signup complete. Check email if confirmation is enabled.');
+  }
 }
-async function logout() { if (sb) await sb.auth.signOut(); session = null; me = null; toast('Logged out'); updateProfileUI(); }
+
+async function logout() {
+  if (sb) await sb.auth.signOut();
+  session = null;
+  me = null;
+  localStorage.removeItem('stackopsSessionName');
+  updateProfileUI();
+  renderRewards();
+  toast('Logged out');
+}
+
 
 async function loadMe() {
   if (!sb || !session) return;
   const email = session.user.email?.toLowerCase() || '';
-  let { data } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  let { data, error: profileError } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  if (profileError) console.warn('Profile load warning:', profileError.message);
   if (!data) {
     const profile = { id: session.user.id, username: email.split('@')[0], display_name: email.split('@')[0], ...defaultProfileFor(email) };
-    await sb.from('profiles').insert(profile).catch(()=>{});
+    const { error: insertError } = await sb.from('profiles').insert(profile);
+    if (insertError) console.warn('Profile insert warning:', insertError.message);
     data = profile;
   }
   me = { ...defaultProfileFor(email), ...data };
@@ -189,16 +233,18 @@ function updateProfileUI() {
   const admin = isAdmin();
   $$('.admin-only').forEach(x => x.classList.toggle('hidden', !admin));
   $('#openAuth').textContent = session ? 'Logout' : 'Login';
-  const name = me?.display_name || me?.username || 'Guest Player';
-  const title = admin ? 'Founder • Crownline Control' : (me?.title || 'Rookie • Login to claim identity');
+  $('#openAuth').classList.toggle('logged-in', !!session);
+  const emailName = session?.user?.email ? session.user.email.split('@')[0] : '';
+  const name = me?.display_name || me?.username || emailName || 'Guest Player';
+  const title = admin ? 'Founder • Crownline Control' : (session ? `${me?.title || 'Rookie'} • ${me?.badge || 'Starter Spark'}` : 'Rookie • Login to claim identity');
   $('#heroName').textContent = name;
   $('#heroTitle').textContent = title;
   $('#heroAvatar').textContent = initials(name);
-  if (me?.avatar_url) $('#heroAvatar').style.backgroundImage = `url(${me.avatar_url})`;
+  $('#heroAvatar').style.backgroundImage = me?.avatar_url ? `url(${me.avatar_url})` : '';
   $('#heroCrown').classList.toggle('hidden', !admin);
   $('#founderRibbon').classList.toggle('hidden', !admin);
   $('#profilePreview').classList.toggle('admin', admin);
-  const selected = demo.banners.find(b => b.key === (me?.selected_banner_key || localStorage.stackopsBanner)) || (admin ? demo.banners[3] : demo.banners[0]);
+  const selected = demo.banners.find(b => b.key === (me?.selected_banner_key || localStorage.stackopsBanner)) || (admin ? demo.banners.find(b => b.key === 'gold') : demo.banners[0]);
   $('#heroBannerName').textContent = selected.name;
   $('#heroBannerPreview').style.background = selected.style;
   $('#teamCounter').textContent = (JSON.parse(localStorage.stackopsTeams || '[]').length + demo.teams.length);
@@ -428,8 +474,15 @@ function initSmoothReveal() {
 function animateCounters() {
   let online = 2429;
   setInterval(() => { online += Math.floor(Math.random()*9 - 3); $('#onlineCounter').textContent = online.toLocaleString() + ' players online'; }, 2400);
-  let xp = 0; const timer = setInterval(()=>{ xp += 41; $('#xpCounter').textContent = xp; if (xp >= 1258) { $('#xpCounter').textContent='1258'; clearInterval(timer); } }, 45);
+  let xp = 0;
+  const timer = setInterval(()=>{
+    if (session) { clearInterval(timer); $('#xpCounter').textContent = playerXP().toLocaleString(); return; }
+    xp += 41;
+    $('#xpCounter').textContent = xp;
+    if (xp >= 1258) { $('#xpCounter').textContent='1258'; clearInterval(timer); }
+  }, 45);
 }
+
 function escapeHtml(str='') { return String(str).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 window.toast = toast;
 document.addEventListener('DOMContentLoaded', init);
