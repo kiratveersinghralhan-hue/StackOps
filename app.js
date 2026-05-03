@@ -86,29 +86,34 @@ async function init() {
   initSupabase();
   wireUI();
   initSmoothReveal();
-  renderAll();
   animateCounters();
+
   if (sb) {
     try {
-      const { data } = await sb.auth.getSession();
-      session = data.session;
+      const { data, error } = await sb.auth.getSession();
+      if (error) console.warn('Session restore warning:', error.message);
+      session = data?.session || null;
       if (session) await safeLoadMe();
       else updateProfileUI();
-      sb.auth.onAuthStateChange(async (_event, s) => {
-        session = s;
-        if (s) await safeLoadMe();
-        else { me = null; updateProfileUI(); renderAllSafe(); }
+
+      sb.auth.onAuthStateChange(async (event, s) => {
+        console.log('[StackOps auth]', event, !!s);
+        session = s || null;
+        if (session) await safeLoadMe();
+        else { me = null; updateProfileUI(); }
         renderAllSafe();
       });
       subscribeRealtime();
     } catch (err) {
       console.error('Auth init error:', err);
-      toast('Auth init error. Check config.js');
+      toast('Auth init error. Check config.js / browser console.');
       updateProfileUI();
     }
   } else {
     updateProfileUI();
   }
+
+  renderAllSafe();
 }
 
 function wireUI() {
@@ -173,46 +178,88 @@ async function safeLoadMe() {
   }
 }
 
-async function login() {
+async function login(e) {
+  if (e?.preventDefault) e.preventDefault();
   if (!sb) return toast('Add Supabase URL and anon key in config.js');
-  const email = $('#email')?.value.trim();
+  const email = $('#email')?.value?.trim()?.toLowerCase();
   const password = $('#password')?.value;
   if (!email || !password) return toast('Enter email and password');
+
   const btn = $('#loginBtn');
-  const oldText = btn?.textContent;
+  const oldText = btn?.textContent || 'Login';
   if (btn) { btn.disabled = true; btn.textContent = 'Logging in...'; }
+
   try {
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
-      const msg = /confirm|verified/i.test(error.message)
-        ? 'Please verify your email in Supabase/email inbox, then login.'
+      console.error('Supabase login error:', error);
+      const msg = /confirm|verified|verification/i.test(error.message)
+        ? 'Email not verified. Confirm your email in inbox or disable email confirmation in Supabase Auth for testing.'
         : error.message;
-      return toast(msg);
+      toast(msg);
+      return;
     }
-    session = data?.session || (await sb.auth.getSession()).data.session;
-    if (!session) return toast('Login did not return a session. Check Supabase Auth URL settings.');
-    await safeLoadMe();
+
+    const restored = await sb.auth.getSession();
+    session = data?.session || restored?.data?.session || null;
+    if (!session) {
+      toast('Login succeeded but session was not saved. Check Supabase Auth Site URL and allowed redirect URLs.');
+      return;
+    }
+
+    // Show logged-in UI immediately, even if profile table/RLS has an issue.
+    const fallback = defaultProfileFor(email);
+    me = {
+      id: session.user.id,
+      email,
+      username: email.split('@')[0],
+      display_name: email.split('@')[0],
+      ...fallback,
+      ...(me || {})
+    };
     $('#authModal')?.classList.remove('active');
     updateProfileUI();
-    renderAllSafe();
     toast('Logged in successfully');
+
+    await safeLoadMe();
+    updateProfileUI();
+    renderAllSafe();
   } catch (err) {
     console.error('Login failed:', err);
-    toast('Login failed. Check console/config.');
+    toast('Login failed. Open browser console for details.');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = oldText || 'Login'; }
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
   }
 }
 
-async function signup() {
+async function signup(e) {
+  if (e?.preventDefault) e.preventDefault();
   if (!sb) return toast('Add Supabase URL and anon key in config.js');
-  const email = $('#email').value.trim();
-  const password = $('#password').value;
-  const { error } = await sb.auth.signUp({ email, password });
-  if (error) return toast(error.message);
-  toast('Signup complete. Check email if confirmation is enabled.');
+  const email = $('#email')?.value?.trim()?.toLowerCase();
+  const password = $('#password')?.value;
+  if (!email || !password) return toast('Enter email and password');
+  const btn = $('#signupBtn');
+  const oldText = btn?.textContent || 'Signup';
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating...'; }
+  try {
+    const { data, error } = await sb.auth.signUp({ email, password });
+    if (error) return toast(error.message);
+    if (data?.session) {
+      session = data.session;
+      await safeLoadMe();
+      $('#authModal')?.classList.remove('active');
+      updateProfileUI();
+      renderAllSafe();
+      toast('Account created and logged in');
+    } else {
+      toast('Signup complete. Check email if confirmation is enabled, then login.');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
+  }
 }
-async function logout() { if (sb) await sb.auth.signOut(); session = null; me = null; toast('Logged out'); updateProfileUI(); }
+
+async function logout() { if (sb) await sb.auth.signOut(); session = null; me = null; localStorage.removeItem('stackopsXP'); toast('Logged out'); updateProfileUI(); renderAllSafe(); }
 
 async function loadMe() {
   if (!sb || !session) return;
@@ -220,7 +267,7 @@ async function loadMe() {
   let { data } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if (!data) {
     const profile = { id: session.user.id, username: email.split('@')[0], display_name: email.split('@')[0], ...defaultProfileFor(email) };
-    await sb.from('profiles').insert(profile).catch(()=>{});
+    await sb.from('profiles').upsert(profile, { onConflict: 'id' }).catch(()=>{});
     data = profile;
   }
   me = { ...defaultProfileFor(email), ...data };
@@ -358,8 +405,10 @@ function renderRewards() {
   $('#badgeCollection').innerHTML = demo.badges.map(b => rewardCard('badge', b, currentBadge === b.name)).join('');
   const activeKey = (me?.selected_banner_key || localStorage.stackopsBanner || (isAdmin() ? 'gold' : 'default'));
   const banners = demo.banners.map(b => bannerCard(b, activeKey === b.key)).join('');
-  $('#bannerCollection').innerHTML = banners;
-  $('#rewardBannerCollection').innerHTML = banners;
+  const bannerEl = $('#bannerCollection');
+  if (bannerEl) bannerEl.innerHTML = banners;
+  const rewardBannerEl = $('#rewardBannerCollection');
+  if (rewardBannerEl) rewardBannerEl.innerHTML = banners;
 }
 function rewardCard(type, item, equipped) {
   const unlocked = isUnlocked(item);
