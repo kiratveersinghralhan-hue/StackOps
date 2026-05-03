@@ -1838,3 +1838,194 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-view="seller-review"], #openSellerDeskBtn').forEach(b => b.onclick = () => window.switchView('seller-review'));
   }, 500);
 })();
+
+/* === StackOps FINAL FULL PROJECT FIX: seller apply + approval desk + live counters === */
+(function(){
+  const $q = (s)=>document.querySelector(s);
+  const esc = (v)=>String(v ?? '').replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const notify = (m)=>{ try { toast(m); } catch { alert(m); } };
+
+  async function getCurrentUserFinal(){
+    try{
+      const sess = await sb?.auth?.getSession?.();
+      if(sess?.data?.session?.user) { session = sess.data.session; return sess.data.session.user; }
+      const gu = await sb?.auth?.getUser?.();
+      if(gu?.data?.user) return gu.data.user;
+    }catch{}
+    return session?.user || null;
+  }
+
+  async function ensureProfileForUserFinal(user){
+    if(!sb || !user) return null;
+    let {data:profile} = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle().catch(()=>({data:null}));
+    if(profile){ me = profile; return profile; }
+    const fallback = {
+      id: user.id,
+      username: (user.email||'player').split('@')[0],
+      display_name: (user.email||'player').split('@')[0],
+      plan_key: 'free',
+      xp: 0,
+      is_seller: false,
+      seller_status: 'none',
+      is_verified: false
+    };
+    await sb.from('profiles').upsert(fallback, {onConflict:'id'}).catch(()=>{});
+    const refetch = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle().catch(()=>({data:fallback}));
+    me = refetch.data || fallback;
+    return me;
+  }
+
+  window.applySeller = async function(){
+    const btn = $q('#applySellerBtn');
+    const old = btn?.textContent || 'Apply to Sell';
+    try{
+      if(btn){ btn.disabled = true; btn.textContent = 'Submitting...'; }
+      if(!sb) throw new Error('Supabase is not connected. Check config.js');
+      const user = await getCurrentUserFinal();
+      if(!user){ notify('Please login first.'); return; }
+      const profile = await ensureProfileForUserFinal(user);
+      if(profile?.is_seller === true || profile?.seller_status === 'approved'){
+        notify('Seller account already active.');
+        try { switchView('market'); } catch {}
+        return;
+      }
+      const email = user.email || '';
+      const name = profile?.display_name || profile?.username || email.split('@')[0] || 'Seller';
+
+      // Avoid duplicate pending applications.
+      const existing = await sb.from('seller_applications')
+        .select('id,status')
+        .eq('user_id', user.id)
+        .in('status', ['pending','approved'])
+        .maybeSingle()
+        .catch(()=>({data:null,error:null}));
+      if(existing?.data?.id){
+        notify(existing.data.status === 'approved' ? 'Seller account already approved.' : 'Your seller application is already pending.');
+        return;
+      }
+
+      const row = {
+        user_id: user.id,
+        applicant_email: email,
+        applicant_name: name,
+        note: 'Seller application from StackOps marketplace',
+        status: 'pending'
+      };
+      const {error} = await sb.from('seller_applications').insert(row);
+      if(error) throw error;
+      await sb.from('profiles').update({seller_status:'pending'}).eq('id', user.id).catch(()=>{});
+      await sb.from('activity_events').insert({actor_id:user.id, username:name, event_type:'seller_application', body:'Submitted seller application'}).catch(()=>{});
+      notify('Seller application submitted. Admin can approve it from Seller Approval Desk.');
+      try { addLiveEvent('Submitted seller application', name, 'seller'); } catch {}
+      try { await window.renderSellerReview?.(); } catch {}
+      try { await window.stackopsRefreshLive?.(); } catch {}
+      try { await renderAdmin?.(); } catch {}
+    }catch(err){
+      console.error('Apply to Sell failed:', err);
+      notify('Could not submit seller application: ' + (err?.message || err));
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = old; }
+    }
+  };
+  try { applySeller = window.applySeller; } catch {}
+
+  function appCardFinal(app, profile={}){
+    const name = profile.display_name || profile.username || app.applicant_name || app.applicant_email || (app.user_id||'seller').slice(0,8);
+    const email = app.applicant_email || profile.email || '';
+    const status = app.status || 'pending';
+    const pending = status === 'pending';
+    return `<div class="seller-review-card ${esc(status)}">
+      <div class="seller-review-top">
+        <div class="seller-person"><div class="avatar">${esc((name||'S')[0])}</div><div><h3>${esc(name)}</h3><small>${esc(email || app.user_id || '')}</small></div></div>
+        <span class="seller-status">${esc(status)}</span>
+      </div>
+      <p>${esc(app.note || 'Seller application from StackOps marketplace')}</p>
+      <small>${app.created_at ? new Date(app.created_at).toLocaleString() : ''}</small>
+      <div class="seller-actions">
+        ${pending ? `<button class="btn primary" onclick="approveSellerFinal('${app.id}')">Approve</button><button class="btn dark" onclick="rejectSellerFinal('${app.id}')">Reject</button>` : `<button class="btn dark" onclick="approveSellerFinal('${app.id}')">Approve again</button>`}
+      </div>
+    </div>`;
+  }
+
+  async function loadProfilesMapFinal(userIds){
+    const map = {};
+    if(!sb || !userIds.length) return map;
+    const {data} = await sb.from('profiles').select('*').in('id', userIds).catch(()=>({data:[]}));
+    (data||[]).forEach(p=>map[p.id]=p);
+    return map;
+  }
+
+  window.renderSellerReview = async function(){
+    const list = $q('#sellerReviewList') || $q('#adminSellers');
+    if(list) list.innerHTML = '<div class="empty-state pulse-soft">Loading seller applications...</div>';
+    if(!sb){ if(list) list.innerHTML = '<div class="empty-state">Supabase not connected.</div>'; return; }
+    const {data:apps,error} = await sb.from('seller_applications').select('*').order('created_at', {ascending:false}).catch(e=>({data:[], error:e}));
+    if(error){ if(list) list.innerHTML = `<div class="empty-state">Could not load seller applications: ${esc(error.message)}</div>`; return; }
+    const profiles = await loadProfilesMapFinal([...(new Set((apps||[]).map(a=>a.user_id).filter(Boolean)))]);
+    const filter = window.sellerDeskFilterFinal || 'pending';
+    const rows = filter === 'all' ? (apps||[]) : (apps||[]).filter(a=>(a.status||'pending')===filter);
+    if(list) list.innerHTML = rows.map(a=>appCardFinal(a, profiles[a.user_id]||{})).join('') || '<div class="empty-state">No seller applications in this filter.</div>';
+    const mini = $q('#adminSellers');
+    if(mini && mini !== list) mini.innerHTML = (apps||[]).slice(0,4).map(a=>appCardFinal(a, profiles[a.user_id]||{})).join('') || 'No seller applications';
+    const st = $q('#sellerDeskStatus'); if(st) st.textContent = `${(apps||[]).length} total`;
+    const sellerCountEls = [...document.querySelectorAll('[data-counter="sellerApps"], #sellerAppCount')];
+    sellerCountEls.forEach(el => el.textContent = String((apps||[]).filter(a=>(a.status||'pending')==='pending').length));
+  };
+
+  window.approveSellerFinal = async function(id){
+    try{
+      const {data:app,error:e1} = await sb.from('seller_applications').select('*').eq('id', id).maybeSingle();
+      if(e1 || !app) throw e1 || new Error('Application not found');
+      const now = new Date().toISOString();
+      const {error:e2} = await sb.from('seller_applications').update({status:'approved', reviewed_at:now}).eq('id', id);
+      if(e2) throw e2;
+      const {error:e3} = await sb.from('profiles').update({is_seller:true, seller_status:'approved', is_verified:true}).eq('id', app.user_id);
+      if(e3) throw e3;
+      notify('Seller approved.');
+      await window.renderSellerReview();
+      try { await window.stackopsRefreshLive?.(); } catch {}
+    }catch(err){ notify('Could not approve seller: ' + (err?.message || err)); }
+  };
+  window.adminApproveSeller = window.approveSellerFinal;
+  window.adminSeller = (id, status) => status === 'approved' ? window.approveSellerFinal(id) : window.rejectSellerFinal(id);
+
+  window.rejectSellerFinal = async function(id){
+    try{
+      const {data:app} = await sb.from('seller_applications').select('*').eq('id', id).maybeSingle().catch(()=>({data:null}));
+      const {error} = await sb.from('seller_applications').update({status:'rejected', reviewed_at:new Date().toISOString()}).eq('id', id);
+      if(error) throw error;
+      if(app?.user_id) await sb.from('profiles').update({seller_status:'rejected'}).eq('id', app.user_id).catch(()=>{});
+      notify('Seller application rejected.');
+      await window.renderSellerReview();
+    }catch(err){ notify('Could not reject seller: ' + (err?.message || err)); }
+  };
+  window.adminRejectSeller = window.rejectSellerFinal;
+
+  const oldSwitchFinal = window.switchView || (typeof switchView !== 'undefined' ? switchView : null);
+  if(oldSwitchFinal){
+    window.switchView = function(id){
+      oldSwitchFinal(id);
+      if(id === 'sellerReview' || id === 'admin') setTimeout(()=>window.renderSellerReview?.(), 80);
+    };
+    try { switchView = window.switchView; } catch {}
+  }
+
+  document.addEventListener('click', (e)=>{
+    if(e.target?.closest?.('#applySellerBtn')){ e.preventDefault(); window.applySeller(); }
+    const f = e.target?.closest?.('[data-seller-filter]');
+    if(f){ window.sellerDeskFilterFinal = f.dataset.sellerFilter || 'pending'; window.renderSellerReview(); }
+    if(e.target?.closest?.('#openSellerDeskBtn')){ try { switchView('sellerReview'); } catch {} }
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const b = $q('#applySellerBtn'); if(b) b.onclick = window.applySeller;
+    setTimeout(()=>{ try { window.renderSellerReview?.(); } catch {} }, 700);
+    if(sb?.channel){
+      try{
+        sb.channel('seller_apps_final_live')
+          .on('postgres_changes', {event:'*', schema:'public', table:'seller_applications'}, ()=>window.renderSellerReview?.())
+          .subscribe();
+      }catch{}
+    }
+  });
+})();
