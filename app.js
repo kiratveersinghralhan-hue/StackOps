@@ -89,11 +89,23 @@ async function init() {
   renderAll();
   animateCounters();
   if (sb) {
-    const { data } = await sb.auth.getSession();
-    session = data.session;
-    if (session) await loadMe();
-    sb.auth.onAuthStateChange(async (_event, s) => { session = s; me = null; if (s) await loadMe(); else updateProfileUI(); });
-    subscribeRealtime();
+    try {
+      const { data } = await sb.auth.getSession();
+      session = data.session;
+      if (session) await safeLoadMe();
+      else updateProfileUI();
+      sb.auth.onAuthStateChange(async (_event, s) => {
+        session = s;
+        if (s) await safeLoadMe();
+        else { me = null; updateProfileUI(); renderAllSafe(); }
+        renderAllSafe();
+      });
+      subscribeRealtime();
+    } catch (err) {
+      console.error('Auth init error:', err);
+      toast('Auth init error. Check config.js');
+      updateProfileUI();
+    }
   } else {
     updateProfileUI();
   }
@@ -137,15 +149,61 @@ function switchView(id) {
   if (id === 'admin') renderAdmin();
 }
 
+
+function renderAllSafe() {
+  try { renderAll(); } catch (err) { console.error('Render error:', err); updateProfileUI(); }
+}
+
+async function safeLoadMe() {
+  try {
+    await loadMe();
+  } catch (err) {
+    console.error('Profile load error:', err);
+    const email = session?.user?.email?.toLowerCase() || '';
+    const fallback = defaultProfileFor(email);
+    me = {
+      id: session?.user?.id,
+      email,
+      username: email ? email.split('@')[0] : 'player',
+      display_name: email ? email.split('@')[0] : 'Player',
+      ...fallback
+    };
+    updateProfileUI();
+    toast('Logged in. Profile table needs SQL/policy check.');
+  }
+}
+
 async function login() {
   if (!sb) return toast('Add Supabase URL and anon key in config.js');
-  const email = $('#email').value.trim();
-  const password = $('#password').value;
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) return toast(error.message);
-  $('#authModal').classList.remove('active');
-  toast('Logged in');
+  const email = $('#email')?.value.trim();
+  const password = $('#password')?.value;
+  if (!email || !password) return toast('Enter email and password');
+  const btn = $('#loginBtn');
+  const oldText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Logging in...'; }
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      const msg = /confirm|verified/i.test(error.message)
+        ? 'Please verify your email in Supabase/email inbox, then login.'
+        : error.message;
+      return toast(msg);
+    }
+    session = data?.session || (await sb.auth.getSession()).data.session;
+    if (!session) return toast('Login did not return a session. Check Supabase Auth URL settings.');
+    await safeLoadMe();
+    $('#authModal')?.classList.remove('active');
+    updateProfileUI();
+    renderAllSafe();
+    toast('Logged in successfully');
+  } catch (err) {
+    console.error('Login failed:', err);
+    toast('Login failed. Check console/config.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText || 'Login'; }
+  }
 }
+
 async function signup() {
   if (!sb) return toast('Add Supabase URL and anon key in config.js');
   const email = $('#email').value.trim();
@@ -555,16 +613,6 @@ loadMe = async function(){
     localStorage.removeItem('stackopsRef');
   }
   renderRetention();
-};
-const __oldLogin = login;
-login = async function(){
-  if (!sb) return toast('Add Supabase URL and anon key in config.js');
-  const email = $('#email').value.trim(); const password = $('#password').value;
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if(error) return toast(error.message);
-  session=data.session || (await sb.auth.getSession()).data.session;
-  if(session) await loadMe();
-  $('#authModal').classList.remove('active'); updateProfileUI(); renderAll(); toast('Logged in');
 };
 const __oldLogout = logout;
 logout = async function(){ if(sb) await sb.auth.signOut(); session=null; me=null; updateProfileUI(); renderRetention(); toast('Logged out'); };
