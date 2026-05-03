@@ -119,6 +119,25 @@
           <div id="miniFeed" class="mini-feed"></div>
         </section>
       </div>
+
+      <div class="retention-grid">
+        <section class="panel invite-panel">
+          <div class="panel-head"><h2>Invite Loop</h2><span class="chip">Viral rewards</span></div>
+          <p class="muted">Invite friends, climb the board and unlock rare identity items.</p>
+          <div class="invite-box"><input id="inviteLink" readonly value="Login to create your invite link"><button class="btn primary" id="copyInviteBtn">Copy Invite</button></div>
+          <div class="milestones" id="inviteMilestones"></div>
+        </section>
+        <section class="panel daily-panel">
+          <div class="panel-head"><h2>Daily Streak</h2><span class="chip" id="streakChip">Day 0</span></div>
+          <div class="daily-ring"><b id="dailyRewardXP">+80 XP</b><span>today reward</span></div>
+          <button class="btn primary full" id="claimDailyBtn">Claim Daily Reward</button>
+          <small id="dailyStatus">Come back daily to unlock banners, badges and titles.</small>
+        </section>
+        <section class="panel leaderboard-panel">
+          <div class="panel-head"><h2>Leaderboard</h2><button class="mini nav" data-view="rewards">Rewards</button></div>
+          <div id="leaderboardList" class="leaderboard-list"></div>
+        </section>
+      </div>
     </section>
 
     <section id="account" class="view">
@@ -189,7 +208,8 @@
       <div class="reward-layout">
         <section class="panel"><div class="panel-head"><h2>Titles</h2><span class="chip">Equip one</span></div><div id="titleCollection" class="reward-grid"></div></section>
         <section class="panel"><div class="panel-head"><h2>Badges</h2><span class="chip">Collect</span></div><div id="badgeCollection" class="reward-grid"></div></section>
-        <section class="panel"><div class="panel-head"><h2>Banners</h2><span class="chip">Profile cards</span></div><div id="rewardBannerCollection" class="banner-wide-list"></div></section>
+        <section class="panel growth-panel"><div class="panel-head"><h2>Next Unlock</h2><span class="chip">Retention</span></div><div id="nextUnlockPanel" class="next-unlock"></div></section>
+        <section class="panel growth-panel"><div class="panel-head"><h2>Social Proof</h2><span class="chip">Live</span></div><div id="socialProofList" class="mini-feed"></div></section>
       </div>
     </section>
 

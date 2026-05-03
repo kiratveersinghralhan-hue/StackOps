@@ -92,17 +92,7 @@ async function init() {
     const { data } = await sb.auth.getSession();
     session = data.session;
     if (session) await loadMe();
-    sb.auth.onAuthStateChange(async (_event, s) => {
-      session = s;
-      me = null;
-      if (s) {
-        await loadMe();
-        renderAll();
-      } else {
-        updateProfileUI();
-        renderRewards();
-      }
-    });
+    sb.auth.onAuthStateChange(async (_event, s) => { session = s; me = null; if (s) await loadMe(); else updateProfileUI(); });
     subscribeRealtime();
   } else {
     updateProfileUI();
@@ -151,62 +141,28 @@ async function login() {
   if (!sb) return toast('Add Supabase URL and anon key in config.js');
   const email = $('#email').value.trim();
   const password = $('#password').value;
-  if (!email || !password) return toast('Enter email and password');
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) return toast(error.message);
-
-  // IMPORTANT: update local app state immediately. Some mobile browsers/GitHub Pages
-  // delay the Supabase auth event, which made the UI stay as Guest/Login.
-  session = data.session || (await sb.auth.getSession()).data.session;
-  if (session) await loadMe();
-
   $('#authModal').classList.remove('active');
-  updateProfileUI();
-  renderAll();
   toast('Logged in');
 }
-
 async function signup() {
   if (!sb) return toast('Add Supabase URL and anon key in config.js');
   const email = $('#email').value.trim();
   const password = $('#password').value;
-  if (!email || !password) return toast('Enter email and password');
-  const { data, error } = await sb.auth.signUp({ email, password });
+  const { error } = await sb.auth.signUp({ email, password });
   if (error) return toast(error.message);
-
-  // If email confirmation is OFF, Supabase returns a session immediately.
-  session = data.session || (await sb.auth.getSession()).data.session;
-  if (session) {
-    await loadMe();
-    $('#authModal').classList.remove('active');
-    updateProfileUI();
-    renderAll();
-    toast('Signup complete. Logged in.');
-  } else {
-    toast('Signup complete. Check email if confirmation is enabled.');
-  }
+  toast('Signup complete. Check email if confirmation is enabled.');
 }
-
-async function logout() {
-  if (sb) await sb.auth.signOut();
-  session = null;
-  me = null;
-  localStorage.removeItem('stackopsSessionName');
-  updateProfileUI();
-  renderRewards();
-  toast('Logged out');
-}
-
+async function logout() { if (sb) await sb.auth.signOut(); session = null; me = null; toast('Logged out'); updateProfileUI(); }
 
 async function loadMe() {
   if (!sb || !session) return;
   const email = session.user.email?.toLowerCase() || '';
-  let { data, error: profileError } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-  if (profileError) console.warn('Profile load warning:', profileError.message);
+  let { data } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if (!data) {
     const profile = { id: session.user.id, username: email.split('@')[0], display_name: email.split('@')[0], ...defaultProfileFor(email) };
-    const { error: insertError } = await sb.from('profiles').insert(profile);
-    if (insertError) console.warn('Profile insert warning:', insertError.message);
+    await sb.from('profiles').insert(profile).catch(()=>{});
     data = profile;
   }
   me = { ...defaultProfileFor(email), ...data };
@@ -233,18 +189,16 @@ function updateProfileUI() {
   const admin = isAdmin();
   $$('.admin-only').forEach(x => x.classList.toggle('hidden', !admin));
   $('#openAuth').textContent = session ? 'Logout' : 'Login';
-  $('#openAuth').classList.toggle('logged-in', !!session);
-  const emailName = session?.user?.email ? session.user.email.split('@')[0] : '';
-  const name = me?.display_name || me?.username || emailName || 'Guest Player';
-  const title = admin ? 'Founder • Crownline Control' : (session ? `${me?.title || 'Rookie'} • ${me?.badge || 'Starter Spark'}` : 'Rookie • Login to claim identity');
+  const name = me?.display_name || me?.username || 'Guest Player';
+  const title = admin ? 'Founder • Crownline Control' : (me?.title || 'Rookie • Login to claim identity');
   $('#heroName').textContent = name;
   $('#heroTitle').textContent = title;
   $('#heroAvatar').textContent = initials(name);
-  $('#heroAvatar').style.backgroundImage = me?.avatar_url ? `url(${me.avatar_url})` : '';
+  if (me?.avatar_url) $('#heroAvatar').style.backgroundImage = `url(${me.avatar_url})`;
   $('#heroCrown').classList.toggle('hidden', !admin);
   $('#founderRibbon').classList.toggle('hidden', !admin);
   $('#profilePreview').classList.toggle('admin', admin);
-  const selected = demo.banners.find(b => b.key === (me?.selected_banner_key || localStorage.stackopsBanner)) || (admin ? demo.banners.find(b => b.key === 'gold') : demo.banners[0]);
+  const selected = demo.banners.find(b => b.key === (me?.selected_banner_key || localStorage.stackopsBanner)) || (admin ? demo.banners[3] : demo.banners[0]);
   $('#heroBannerName').textContent = selected.name;
   $('#heroBannerPreview').style.background = selected.style;
   $('#teamCounter').textContent = (JSON.parse(localStorage.stackopsTeams || '[]').length + demo.teams.length);
@@ -474,15 +428,155 @@ function initSmoothReveal() {
 function animateCounters() {
   let online = 2429;
   setInterval(() => { online += Math.floor(Math.random()*9 - 3); $('#onlineCounter').textContent = online.toLocaleString() + ' players online'; }, 2400);
-  let xp = 0;
-  const timer = setInterval(()=>{
-    if (session) { clearInterval(timer); $('#xpCounter').textContent = playerXP().toLocaleString(); return; }
-    xp += 41;
-    $('#xpCounter').textContent = xp;
-    if (xp >= 1258) { $('#xpCounter').textContent='1258'; clearInterval(timer); }
-  }, 45);
+  let xp = 0; const timer = setInterval(()=>{ xp += 41; $('#xpCounter').textContent = xp; if (xp >= 1258) { $('#xpCounter').textContent='1258'; clearInterval(timer); } }, 45);
 }
-
 function escapeHtml(str='') { return String(str).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 window.toast = toast;
+
+
+/* === StackOps Retention + Viral Upgrade Patch === */
+const retention = {
+  inviteMilestones:[
+    {count:1,reward:'First Recruit badge',xp:120},
+    {count:3,reward:'Redline Protocol banner',xp:350},
+    {count:7,reward:'Squad Builder title',xp:900},
+    {count:15,reward:'Shadow Ops banner',xp:1600},
+    {count:30,reward:'Radiant Mind title',xp:3000}
+  ],
+  social:[
+    'A new duelist joined the global lobby',
+    'Someone unlocked Redline Protocol',
+    'A coach application is waiting for approval',
+    '3 players formed a ranked squad',
+    'Founder Crownline active in the arena'
+  ]
+};
+function getInviteCode(){
+  if(!session?.user?.id) return '';
+  return (me?.referral_code || session.user.id.slice(0,8)).toLowerCase();
+}
+function getInviteCount(){ return Number(me?.invite_count || localStorage.stackopsInvites || 0); }
+function getStreak(){ return Number(me?.daily_streak || localStorage.stackopsStreak || 0); }
+async function awardXP(xp, reason='XP earned'){
+  if(!session || isAdmin()) { if(isAdmin()) toast('Founder already has all unlocks'); return; }
+  const next = Number(me?.xp || localStorage.stackopsXP || 0) + Number(xp || 0);
+  localStorage.stackopsXP = next;
+  if(sb) await sb.from('profiles').update({xp:next}).eq('id', session.user.id).catch(()=>{});
+  me = {...me, xp:next};
+  renderRewards(); updateProfileUI(); renderAccountPreview(); renderRetention();
+  celebrate(); toast(`${reason}: +${xp} XP`);
+}
+function celebrate(){
+  const wrap=document.createElement('div'); wrap.className='confetti';
+  for(let i=0;i<22;i++){ const c=document.createElement('i'); c.style.left=(Math.random()*100)+'vw'; c.style.animationDelay=(Math.random()*180)+'ms'; c.style.transform=`rotate(${Math.random()*180}deg)`; wrap.appendChild(c); }
+  document.body.appendChild(wrap); setTimeout(()=>wrap.remove(),1100);
+}
+function renderRetention(){
+  const inviteInput = $('#inviteLink');
+  if(inviteInput){
+    const code=getInviteCode();
+    inviteInput.value = code ? `${location.origin}${location.pathname}?ref=${code}` : 'Login to create your invite link';
+  }
+  const inv=getInviteCount();
+  const mil=$('#inviteMilestones');
+  if(mil) mil.innerHTML=retention.inviteMilestones.map(m=>`<div class="milestone ${inv>=m.count?'done':''}"><div><b>${m.count} invite${m.count>1?'s':''}</b><small>${m.reward} • +${m.xp} XP</small></div><span class="chip">${Math.min(inv,m.count)}/${m.count}</span></div>`).join('');
+  const chip=$('#streakChip'); if(chip) chip.textContent=`Day ${getStreak()}`;
+  const status=$('#dailyStatus');
+  const today=new Date().toISOString().slice(0,10);
+  if(status) status.textContent = localStorage.stackopsLastDaily===today ? 'Claimed today. Come back tomorrow for streak XP.' : 'Ready to claim. Streak rewards help unlock banners faster.';
+  const btn=$('#claimDailyBtn'); if(btn) btn.textContent = localStorage.stackopsLastDaily===today ? 'Claimed Today' : 'Claim Daily Reward';
+  const lb=$('#leaderboardList');
+  if(lb){
+    const rows=[
+      {name:me?.username||me?.display_name||'You',xp:playerXP(),tag:isAdmin()?'Founder':'You'},
+      {name:'VandalMind',xp:4200,tag:'Top IGL'},
+      {name:'ClutchRift',xp:3180,tag:'Inviter'},
+      {name:'SageOps',xp:2450,tag:'Coach'},
+      {name:'NeonPath',xp:1770,tag:'Rising'}
+    ].sort((a,b)=>b.xp-a.xp);
+    lb.innerHTML=rows.map((r,i)=>`<div class="leader-row"><span class="leader-rank">${i+1}</span><div><b>${escapeHtml(r.name)}</b><small>${Number(r.xp||0).toLocaleString()} XP</small></div><span class="chip">${r.tag}</span></div>`).join('');
+  }
+  renderNextUnlock(); renderSocialProof();
+}
+function renderNextUnlock(){
+  const box=$('#nextUnlockPanel'); if(!box) return;
+  const xp=playerXP();
+  const all=[...demo.titles.map(x=>({...x,type:'Title'})),...demo.badges.map(x=>({...x,type:'Badge'})),...demo.banners.map(x=>({...x,type:'Banner'}))].filter(x=>!x.adminOnly && Number(x.xp)>xp).sort((a,b)=>a.xp-b.xp);
+  const next=all[0];
+  if(!next){ box.innerHTML='<div class="unlock-card"><h3>All public rewards unlocked</h3><p class="muted">Keep building your rep and invite players.</p></div>'; return; }
+  const pct=Math.max(3, Math.min(100, Math.round((xp/next.xp)*100)));
+  box.innerHTML=`<div class="unlock-card"><span class="eyebrow">Next ${next.type}</span><h3>${next.name}</h3><p class="muted">${next.desc || 'Unlock by staying active.'}</p><small>${xp.toLocaleString()} / ${next.xp.toLocaleString()} XP</small><div class="progress-track"><i style="width:${pct}%"></i></div></div>`;
+}
+function renderSocialProof(){
+  const box=$('#socialProofList'); if(!box) return;
+  box.innerHTML=retention.social.map((x,i)=>`<div class="feed-item"><b>${i%2?'⚡':'🔥'} Live</b><br>${x}</div>`).join('');
+}
+async function claimDailyReward(){
+  if(needLogin()) return;
+  const today=new Date().toISOString().slice(0,10);
+  if(localStorage.stackopsLastDaily===today) return toast('Daily reward already claimed');
+  const streak=getStreak()+1;
+  localStorage.stackopsLastDaily=today; localStorage.stackopsStreak=streak;
+  if(sb) await sb.from('daily_checkins').insert({user_id:session.user.id, checkin_date:today, xp_awarded:80 + (streak*10)}).catch(()=>{});
+  if(sb) await sb.from('profiles').update({daily_streak:streak,last_daily_claim:today}).eq('id',session.user.id).catch(()=>{});
+  me={...me,daily_streak:streak,last_daily_claim:today};
+  await awardXP(80 + (streak*10), `Daily streak day ${streak}`);
+}
+function copyInvite(){
+  if(needLogin()) return;
+  const val=$('#inviteLink')?.value || '';
+  navigator.clipboard?.writeText(val).then(()=>toast('Invite link copied')).catch(()=>toast(val));
+}
+function processReferral(){
+  const ref=new URLSearchParams(location.search).get('ref');
+  if(ref) localStorage.stackopsRef=ref;
+}
+const __oldWireUI = wireUI;
+wireUI = function(){
+  __oldWireUI();
+  $('#copyInviteBtn') && ($('#copyInviteBtn').onclick=copyInvite);
+  $('#claimDailyBtn') && ($('#claimDailyBtn').onclick=claimDailyReward);
+};
+const __oldRenderAll = renderAll;
+renderAll = function(){ __oldRenderAll(); renderRetention(); };
+const __oldLoadMe = loadMe;
+loadMe = async function(){
+  await __oldLoadMe();
+  const email=session?.user?.email?.toLowerCase()||'';
+  const patch={};
+  if(!me?.referral_code) patch.referral_code=session.user.id.slice(0,8).toLowerCase();
+  if(me?.daily_streak==null) patch.daily_streak=0;
+  if(Object.keys(patch).length && sb) await sb.from('profiles').update(patch).eq('id',session.user.id).catch(()=>{});
+  me={...me,...patch};
+  // Referral capture: simple safe insert; duplicate prevented by SQL unique index.
+  const ref=localStorage.stackopsRef;
+  if(ref && sb && ref !== patch.referral_code){
+    await sb.from('referrals').insert({referral_code:ref, invited_user_id:session.user.id}).catch(()=>{});
+    localStorage.removeItem('stackopsRef');
+  }
+  renderRetention();
+};
+const __oldLogin = login;
+login = async function(){
+  if (!sb) return toast('Add Supabase URL and anon key in config.js');
+  const email = $('#email').value.trim(); const password = $('#password').value;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error) return toast(error.message);
+  session=data.session || (await sb.auth.getSession()).data.session;
+  if(session) await loadMe();
+  $('#authModal').classList.remove('active'); updateProfileUI(); renderAll(); toast('Logged in');
+};
+const __oldLogout = logout;
+logout = async function(){ if(sb) await sb.auth.signOut(); session=null; me=null; updateProfileUI(); renderRetention(); toast('Logged out'); };
+// reward actions get automatic XP
+const __oldCreatePost = createPost;
+createPost = async function(){ const before=JSON.parse(localStorage.stackopsPosts||'[]').length; await __oldCreatePost(); const after=JSON.parse(localStorage.stackopsPosts||'[]').length; if(after>before) await awardXP(25,'Community post'); };
+const __oldCreateTeam = createTeam;
+createTeam = async function(e){ await __oldCreateTeam(e); if(session && !isAdmin()) await awardXP(35,'Team created'); };
+const __oldSendMessage = sendMessage;
+sendMessage = async function(){ const had=$('#messageInput')?.value.trim(); await __oldSendMessage(); if(had && session && !isAdmin()){ const last=Number(localStorage.stackopsLastChatXP||0); if(Date.now()-last>60000){ localStorage.stackopsLastChatXP=Date.now(); await awardXP(5,'Chat activity'); }} };
+const __oldJoinTeam = window.joinTeam;
+window.joinTeam = function(name){ __oldJoinTeam(name); if(session && !isAdmin()) awardXP(15,'Joined squad'); };
+processReferral();
+
 document.addEventListener('DOMContentLoaded', init);

@@ -45,3 +45,10 @@ For real production money, add server-side payment verification later.
 
 ## Deploy
 Upload the full folder to any static host.
+
+
+## Retention Final Upgrade
+
+SQL REQUIRED: YES — run `retention-final-safe.sql` once in Supabase. It is safe to run multiple times and does not delete data.
+
+Added: invite rewards, daily streaks, leaderboard, next-unlock panel, social proof feed, XP triggers, safer login state refresh, and smoother interactions.
