@@ -161,3 +161,6 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;bac
 .admin-list .error-card,.manual-admin-panel .error-card{padding:16px;border:1px solid rgba(255,209,102,.32);background:rgba(255,209,102,.08);border-radius:18px;color:#ffdca0;line-height:1.45}
 .order-card-premium .proof-actions .mini{min-height:42px}
 .manual-order-card,.order-card-premium{word-break:break-word}
+
+/* Clean real-data mode */
+.empty-state{border:1px dashed rgba(255,255,255,.16);border-radius:18px;padding:18px;color:var(--muted);background:rgba(255,255,255,.025);text-align:center;font-weight:700}

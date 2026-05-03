@@ -9,23 +9,9 @@ let voiceJoined = false;
 const adminEmails = (cfg.ADMIN_EMAILS || []).map((e) => e.toLowerCase());
 
 const demo = {
-  teams: [
-    { id:'t1', name:'Immortal Scrim', game:'Valorant', region:'Mumbai', rank:'Immortal+', description:'Need Duelist + Smokes. Serious comms only.', owner_id:'demo' },
-    { id:'t2', name:'Clash Flex', game:'League of Legends', region:'EUW', rank:'Gold+', description:'Jungle + Mid needed for weekly Clash.', owner_id:'demo' },
-    { id:'t3', name:'TFT Lab', game:'Teamfight Tactics', region:'SEA', rank:'Diamond+', description:'Comp testing, chill voice, no toxicity.', owner_id:'demo' },
-    { id:'t4', name:'Premier Tryouts', game:'Valorant', region:'Singapore', rank:'Ascendant+', description:'Looking for sentinel and IGL.', owner_id:'demo' }
-  ],
-  posts: [
-    { id:'p1', username:'RazeMain', content:'Need Premier 5 stack tonight. Mumbai server. Drop role + rank.', image_url:'', created_at:new Date().toISOString() },
-    { id:'p2', username:'CoachByte', content:'Opened 3 VOD review slots. First 10 minutes free for StackOps users.', image_url:'', created_at:new Date().toISOString() },
-    { id:'p3', username:'StackOps', content:'New collectible banner unlocked: Crownline Protocol.', image_url:'', created_at:new Date().toISOString() }
-  ],
-  services: [
-    { title:'Valorant Aim Coaching', description:'1 hour aim routine + VOD notes', price_inr:399, status:'approved' },
-    { title:'Duo Rank Strategy', description:'Macro, agent pool and comm review', price_inr:999, status:'approved' },
-    { title:'Team Scrim Analysis', description:'Full team VOD review + PDF plan', price_inr:2499, status:'approved' },
-    { title:'Pro Trial Bootcamp', description:'3-day structured improvement plan', price_inr:5999, status:'approved' }
-  ],
+  teams: [],
+  posts: [],
+  services: [],
   plans: [
     { key:'free', name:'Free', price_inr:0, desc:'Starter profile, squads, community and basic rewards' },
     { key:'bronze', name:'Bronze', price_inr:199, desc:'Starter premium badge + small profile boost' },
@@ -402,7 +388,7 @@ function updateProfileUI() {
   const selected = demo.banners.find(b => b.key === (me?.selected_banner_key || localStorage.stackopsBanner)) || (admin ? demo.banners[3] : demo.banners[0]);
   $('#heroBannerName').textContent = selected.name;
   $('#heroBannerPreview').style.background = selected.style;
-  $('#teamCounter').textContent = (JSON.parse(localStorage.stackopsTeams || '[]').length + demo.teams.length);
+  $('#teamCounter').textContent = (JSON.parse(localStorage.stackopsTeams || '[]').length);
   $('#badgeCounter').textContent = admin ? 6 : 2;
   $('#levelFill').style.width = admin ? '100%' : '46%';
   renderAccountPreview();
@@ -439,9 +425,12 @@ function renderAll() {
 }
 function renderTeams() {
   const local = JSON.parse(localStorage.stackopsTeams || '[]');
-  const teams = [...local, ...demo.teams];
-  $('#hotTeams').innerHTML = teams.slice(0,3).map(teamCard).join('');
-  $('#teamList').innerHTML = teams.map(teamCard).join('');
+  const teams = [...local];
+  const empty = '<div class="empty-state">No real teams yet. Create the first lobby.</div>';
+  const hot = $('#hotTeams');
+  const list = $('#teamList');
+  if (hot) hot.innerHTML = teams.length ? teams.slice(0,3).map(teamCard).join('') : empty;
+  if (list) list.innerHTML = teams.length ? teams.map(teamCard).join('') : empty;
 }
 function teamCard(t) {
   const canDelete = t.owner_id === session?.user?.id || t.local;
@@ -496,9 +485,12 @@ window.joinTeam = (name) => { switchView('chat'); setChannel('team-room'); toast
 
 function renderPosts() {
   const local = JSON.parse(localStorage.stackopsPosts || '[]');
-  const posts = [...local, ...demo.posts];
-  $('#miniFeed').innerHTML = posts.slice(0,4).map(p => `<div class="feed-item"><b>@${p.username || 'player'}</b><br>${p.content}</div>`).join('');
-  $('#postList').innerHTML = posts.map(p => `<article class="post-card"><b>@${p.username || 'player'}</b><small>${new Date(p.created_at || Date.now()).toLocaleString()}</small>${p.image_url ? `<img src="${p.image_url}" alt="Post image" style="width:100%;border-radius:16px;margin:12px 0;max-height:360px;object-fit:cover">` : ''}<p>${p.content}</p><div class="post-actions"><button class="mini" onclick="toast('GG sent')">GG</button><button class="mini" onclick="toast('Invite opened')">Invite</button><button class="mini" onclick="toast('Saved')">Save</button></div></article>`).join('');
+  const posts = [...local];
+  const empty = '<div class="empty-state">No real community posts yet. Be the first to post.</div>';
+  const mini = $('#miniFeed');
+  const list = $('#postList');
+  if (mini) mini.innerHTML = posts.length ? posts.slice(0,4).map(p => `<div class="feed-item"><b>@${p.username || 'player'}</b><br>${p.content}</div>`).join('') : empty;
+  if (list) list.innerHTML = posts.length ? posts.map(p => `<article class="post-card"><b>@${p.username || 'player'}</b><small>${new Date(p.created_at || Date.now()).toLocaleString()}</small>${p.image_url ? `<img src="${p.image_url}" alt="Post image" style="width:100%;border-radius:16px;margin:12px 0;max-height:360px;object-fit:cover">` : ''}<p>${p.content}</p><div class="post-actions"><button class="mini" onclick="toast('GG sent')">GG</button><button class="mini" onclick="toast('Invite opened')">Invite</button><button class="mini" onclick="toast('Saved')">Save</button></div></article>`).join('') : empty;
 }
 async function createPost() {
   if (needLogin()) return;
@@ -545,8 +537,7 @@ function renderPlans() {
 }
 
 async function refreshPaymentGMV(){
-  const demoGmv = demo.services.reduce((a,s) => a + s.price_inr * 19, 0);
-  let total = demoGmv;
+  let total = 0;
   if (sb) {
     try {
       const { data } = await sb.from('payments').select('amount_inr,status');
@@ -949,7 +940,7 @@ function renderRetention(){
       {name:me?.username||me?.display_name||'You',xp:playerXP(),tag:isAdmin()?'Founder':'You'},
       {name:'VandalMind',xp:4200,tag:'Top IGL'},
       {name:'ClutchRift',xp:3180,tag:'Inviter'},
-      {name:'SageOps',xp:2450,tag:'Coach'},
+      
       {name:'NeonPath',xp:1770,tag:'Rising'}
     ].sort((a,b)=>b.xp-a.xp);
     lb.innerHTML=rows.map((r,i)=>`<div class="leader-row"><span class="leader-rank">${i+1}</span><div><b>${escapeHtml(r.name)}</b><small>${Number(r.xp||0).toLocaleString()} XP</small></div><span class="chip">${r.tag}</span></div>`).join('');
@@ -1031,13 +1022,7 @@ document.addEventListener('DOMContentLoaded', init);
 
 /* === StackOps Growth Command Final Patch === */
 (function(){
-  const liveFallback = [
-    {kind:'join', text:'New player joined the arena', user:'RazeMain'},
-    {kind:'unlock', text:'Unlocked Redline Protocol banner', user:'VandalMind'},
-    {kind:'team', text:'Created a public squad for Valorant', user:'ClutchRift'},
-    {kind:'seller', text:'Coach application is pending review', user:'CoachByte'},
-    {kind:'voice', text:'Entered a voice room', user:'SageOps'}
-  ];
+  const liveFallback = [];
   let liveEvents = JSON.parse(localStorage.stackopsLiveEvents || '[]');
   let lastShownXP = null;
 
@@ -1088,8 +1073,8 @@ document.addEventListener('DOMContentLoaded', init);
   async function refreshTrueCounters(){
     const onlineEl = $('#onlineCounter');
     let players = 2428 + Math.floor(Math.random()*18);
-    let teams = JSON.parse(localStorage.stackopsTeams || '[]').length + (demo?.teams?.length || 0);
-    let posts = JSON.parse(localStorage.stackopsPosts || '[]').length + (demo?.posts?.length || 0);
+    let teams = JSON.parse(localStorage.stackopsTeams || '[]').length;
+    let posts = JSON.parse(localStorage.stackopsPosts || '[]').length;
     let sellers = 0;
     if(sb){
       const [p,t,po,s] = await Promise.all([
@@ -1106,7 +1091,7 @@ document.addEventListener('DOMContentLoaded', init);
     if(onlineEl) onlineEl.textContent = players.toLocaleString('en-IN') + ' players online';
     const hotSpan = [...document.querySelectorAll('.status-tape span')];
     if(hotSpan[1]) hotSpan[1].textContent = `${teams || 0} squads`;
-    if(hotSpan[2]) hotSpan[2].textContent = `${Math.max(8, sellers || 0)} coaches`;
+    if(hotSpan[2]) hotSpan[2].textContent = `${Math.max(0, sellers || 0)} approved sellers`;
     pulse(onlineEl);
   }
 
@@ -1165,7 +1150,7 @@ document.addEventListener('DOMContentLoaded', init);
   const oldRenderPosts = renderPosts;
   renderPosts = function(){
     const local = JSON.parse(localStorage.stackopsPosts || '[]');
-    const posts = [...local, ...demo.posts.map((p,i)=>({...p, id:'demo-'+i, demo:true}))];
+    const posts = [...local];
     const mini = $('#miniFeed');
     if(mini) mini.innerHTML = posts.slice(0,4).map(p => `<div class="feed-item"><b>@${escapeHtml(p.username || 'player')}</b><br>${escapeHtml(p.content)}<div class="feed-actions"><button class="mini nav" data-view="community">Open</button><button class="mini" onclick="switchView('teams')">Invite squad</button></div></div>`).join('');
     const list = $('#postList');
@@ -1258,11 +1243,11 @@ document.addEventListener('DOMContentLoaded', init);
     $('#adminUsers').innerHTML = userRows.map(u => `<div class="user-row"><b>${escapeHtml(u.username || u.id.slice(0,8))}</b><small>${u.role || 'user'} · ${u.account_status || 'approved'} · ${u.is_banned?'banned':'active'} · ${u.is_verified?'verified':'unverified'}</small><button class="mini" onclick="adminUpdateUser('${u.id}','approved')">Approve</button><button class="mini" onclick="adminBan('${u.id}',${!u.is_banned})">${u.is_banned?'Unban':'Ban'}</button><button class="mini" onclick="adminVerify('${u.id}')">Verify</button></div>`).join('') || 'No users yet';
     $('#adminSellers').innerHTML = sellerRows.map(s => `<div class="user-row"><b>${escapeHtml(s.user_id?.slice(0,8) || 'seller')}</b><small>${s.status || 'pending'} · ${new Date(s.created_at || Date.now()).toLocaleString()}</small><button class="mini" onclick="adminSeller('${s.id}','approved')">Approve</button><button class="mini danger" onclick="adminSeller('${s.id}','rejected')">Reject</button></div>`).join('') || 'No seller applications';
     const feed = $('#adminLiveFeed'); if(feed){
-      const rows = [...liveEvents, ...liveFallback].slice(0,8);
-      feed.innerHTML = rows.map(x=>`<div class="admin-live-row"><div><b>${escapeHtml(x.user || 'Player')}</b><small>${escapeHtml(x.text || x.content || 'activity')}</small></div><span class="chip">${escapeHtml(x.kind || x.type || 'live')}</span></div>`).join('');
+      const rows = [...liveEvents].slice(0,8);
+      feed.innerHTML = rows.length ? rows.map(x=>`<div class="admin-live-row"><div><b>${escapeHtml(x.user || 'Player')}</b><small>${escapeHtml(x.text || x.content || 'activity')}</small></div><span class="chip">${escapeHtml(x.kind || x.type || 'live')}</span></div>`).join('') : '<div class="empty-state">No real live events yet.</div>';
     }
   };
-  function renderAdminFallback(){ const f=$('#adminLiveFeed'); if(f) f.innerHTML=liveFallback.map(x=>`<div class="admin-live-row"><div><b>${x.user}</b><small>${x.text}</small></div><span class="chip">demo</span></div>`).join(''); }
+  function renderAdminFallback(){ const f=$('#adminLiveFeed'); if(f) f.innerHTML='<div class="empty-state">No real live events yet.</div>'; }
 
   const oldSubscribe = subscribeRealtime;
   subscribeRealtime = function(){
@@ -1500,7 +1485,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setText('#mRevenue', money(Math.max(orderRev, payRev, 0)));
       const hot = document.querySelectorAll('.hot-strip span');
       if(hot[1]) hot[1].textContent = `${Math.max(31, Number(u.count || 0))} squads`;
-      if(hot[2]) hot[2].textContent = `${Math.max(8, approved)} coaches`;
+      if(hot[2]) hot[2].textContent = `${Math.max(0, approved)} approved sellers`;
     }catch(err){ console.warn('live counters', err.message); }
   };
 
@@ -2387,8 +2372,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!error && data?.length) return data;
     }
     const local = JSON.parse(localStorage.stackopsSellerServices || '[]');
-    if (local.length) return local;
-    return demo.services.map((s,i)=>({id:'demo-'+i,seller_id:null,title:s.title,game:'Valorant',description:s.description,price_inr:s.price_inr,status:'active', demo:true}));
+    if (local.length) return local.filter(s => s.status !== 'deleted');
+    return [];
+
   }
 
   async function openManualPayment(service){
@@ -2461,10 +2447,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const seller = await isCurrentUserSeller();
     const services = await loadSellerServices();
     const sellerBox = seller ? `<section class="panel seller-create-box"><div class="panel-head"><h2>Create Seller Service</h2><span class="chip">Approved seller</span></div><input id="serviceTitle" placeholder="Service title e.g. Valorant Aim Coaching"><input id="serviceGame" placeholder="Game e.g. Valorant"><input id="servicePrice" type="number" placeholder="Price in ₹"><textarea id="serviceDesc" placeholder="What will buyer get?"></textarea><button class="btn primary full" id="createSellerServiceBtn">Publish Service</button></section>` : `<section class="panel"><h2>Want to sell?</h2><p class="muted">Apply as seller, upload proof when asked, then admin approves your account. Payments come to StackOps first and seller payout is tracked after commission.</p></section>`;
-    list.innerHTML = sellerBox + services.map(s => {
+    const serviceCards = services.length ? services.map(s => {
       const calc = middlemanCommission(s.price_inr);
       return `<article class="service-card"><span class="tag">Admin approved</span><h3>${safe(s.title)}</h3><p>${safe(s.description)}</p><small>${safe(s.game || 'Riot Games')}</small><h2>${money(s.price_inr)}</h2><small>Platform commission: ${calc.pct}% · Seller payout: ${money(calc.sellerGets)}</small><button class="btn primary full" onclick="openManualPaymentForService('${safe(String(s.id))}')">Book / Pay Proof</button></article>`;
-    }).join('');
+    }).join('') : '<div class="empty-state">No real seller services yet. Once sellers are approved, their services will appear here.</div>';
+    list.innerHTML = sellerBox + serviceCards;
     document.querySelector('#createSellerServiceBtn')?.addEventListener('click', createSellerService);
     refreshPaymentGMV?.();
     refreshSellerButton?.();
