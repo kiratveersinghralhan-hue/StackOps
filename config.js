@@ -1,12 +1,10 @@
 window.STACKOPS_CONFIG = {
   SUPABASE_URL: 'https://ffagzruaerzftqwmnbmp.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYWd6cnVhZXJ6ZnRxd21uYm1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNTYyMTcsImV4cCI6MjA5MDczMjIxN30.H_bI5O0YLMOjvnyGyi6HIq1scBHydRebB3lx7nJkVzc',
-  // Razorpay: paste your TEST key first, then switch to LIVE key when ready.
-  // Money goes to the bank account linked with this Razorpay account after KYC/settlement.
-  RAZORPAY_KEY_ID: 'rzp_live_SkpHJhAcRCNvzO',
-  // Keep false for GitHub Pages / live account under review. Set true only after Razorpay live checkout is approved.
+  // Razorpay disabled: StackOps now uses manual UPI middleman payments.
+  RAZORPAY_KEY_ID: '',
   RAZORPAY_CHECKOUT_ENABLED: false,
-  RAZORPAY_PAYMENT_LINK: 'https://razorpay.me/@RevivoCare',
+  RAZORPAY_PAYMENT_LINK: '',
   // Supabase Edge Function URL for verified auto-unlocks.
   // After deploying the webhook function, paste:
   // https://YOUR_PROJECT_REF.functions.supabase.co/razorpay-webhook

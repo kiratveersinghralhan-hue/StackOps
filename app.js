@@ -2660,3 +2660,209 @@ document.addEventListener('DOMContentLoaded', () => {
   try { startRazorpayCheckout = async function({ name, amount, type='service', plan_key=null }){ return stackopsOpenManualPayment({ name, amount, type, plan_key }); }; } catch(e) {}
   document.addEventListener('DOMContentLoaded', stackopsEnsureManualModal);
 })();
+
+/* ==========================================================
+   STACKOPS NEXT UPGRADE: polished manual UPI payments,
+   admin payment queue, seller wallet + payout tracking.
+   ========================================================== */
+(function(){
+  const cfg2 = () => window.STACKOPS_CONFIG || {};
+  const upi = () => cfg2().MANUAL_UPI_ID || 'ralhanx@ptaxis';
+  const qr = () => cfg2().MANUAL_UPI_QR_URL || 'upi-qr.jpeg';
+  const rupee = (v) => { try { return typeof money === 'function' ? money(v) : `₹${Number(v||0).toLocaleString('en-IN')}`; } catch(e){ return `₹${v||0}`; } };
+  const say = (m) => { try { return typeof toast === 'function' ? toast(m); } catch(e){} alert(m); };
+  const admin = () => { try { return typeof isAdmin === 'function' && isAdmin(); } catch(e){ return false; } };
+  const signedProofUrl = async (path) => {
+    if (!path || !sb) return '';
+    const res = await sb.storage.from('payment-proofs').createSignedUrl(path, 600).then(undefined,()=>({data:null}));
+    return res?.data?.signedUrl || '';
+  };
+  const calcCommission2 = (amount) => {
+    const n = Number(amount || 0);
+    const rules = cfg2().COMMISSION_RULES || [];
+    const rule = rules.find(r => n >= Number(r.min||0) && n <= Number(r.max||99999999)) || { percent: 15 };
+    const pct = Number(rule.percent || 15);
+    const commission = Math.round(n * pct / 100);
+    return { pct, commission, sellerGets: Math.max(0, n - commission) };
+  };
+
+  function ensureModal2(){
+    if (document.querySelector('#soManualModalV2')) return;
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="soManualModalV2" class="manual-modal hidden">
+        <div class="manual-modal-card">
+          <button class="manual-modal-close" id="soManualCloseV2">×</button>
+          <span class="chip">Middleman escrow</span>
+          <h2 id="soPayTitleV2">Complete UPI Payment</h2>
+          <p class="notice">Pay to StackOps first. Upload a clear screenshot where the UPI Reference / UTR number is visible. Approval can take <b>24–48 hours</b>.</p>
+          <div class="manual-pay-grid">
+            <div class="qr-box"><img id="soPayQrV2" alt="StackOps UPI QR"></div>
+            <div>
+              <p>Amount</p><h2 id="soPayAmountV2">₹0</h2>
+              <p>UPI ID</p><div class="copy-line"><b id="soPayUpiV2">ralhanx@ptaxis</b><button class="mini" id="soCopyUpiV2">Copy</button></div>
+              <small class="muted">Buyer pays you first. You approve order, then pay seller after completion.</small>
+            </div>
+          </div>
+          <label class="field-label">UPI Reference / UTR Number</label>
+          <input id="soPayRefV2" type="text" placeholder="Example: 412345678901" autocomplete="off">
+          <label class="field-label">Payment screenshot / proof</label>
+          <input id="soPayProofV2" type="file" accept="image/*,.pdf">
+          <button class="btn primary full" id="soSubmitPayV2">Submit Payment Proof</button>
+          <p class="muted small">You will see pending status until admin verifies the proof.</p>
+        </div>
+      </div>`);
+    document.querySelector('#soManualCloseV2')?.addEventListener('click', ()=>document.querySelector('#soManualModalV2')?.classList.add('hidden'));
+    document.querySelector('#soCopyUpiV2')?.addEventListener('click', async()=>{ try { await navigator.clipboard.writeText(upi()); say('UPI ID copied'); } catch(e){ say(upi()); } });
+    document.querySelector('#soSubmitPayV2')?.addEventListener('click', submitManualPaymentV2);
+  }
+
+  let currentItemV2 = null;
+  async function openManualPaymentV2(item){
+    if (typeof needLogin === 'function' && needLogin()) return;
+    if (!session?.user) return say('Login first');
+    ensureModal2();
+    currentItemV2 = item || {};
+    document.querySelector('#soPayTitleV2').textContent = currentItemV2.name || currentItemV2.title || 'StackOps Payment';
+    document.querySelector('#soPayAmountV2').textContent = rupee(currentItemV2.amount || currentItemV2.price_inr || 0);
+    document.querySelector('#soPayUpiV2').textContent = upi();
+    document.querySelector('#soPayQrV2').src = qr();
+    document.querySelector('#soPayRefV2').value = '';
+    document.querySelector('#soPayProofV2').value = '';
+    document.querySelector('#soManualModalV2').classList.remove('hidden');
+  }
+
+  async function submitManualPaymentV2(){
+    if (!sb || !session?.user) return say('Login again and retry');
+    const item = currentItemV2 || {};
+    const amount = Number(item.amount || item.price_inr || 0);
+    const reference = document.querySelector('#soPayRefV2')?.value?.trim();
+    const file = document.querySelector('#soPayProofV2')?.files?.[0];
+    if (!amount || amount < 1) return say('Invalid payment amount');
+    if (!reference || reference.length < 6) return say('Enter valid UPI Reference / UTR number');
+    if (!file) return say('Upload screenshot/proof first');
+    const safeName = (file.name || 'proof.png').replace(/[^a-z0-9_.-]/gi, '-');
+    const proofPath = `${session.user.id}/${Date.now()}-${safeName}`;
+    const up = await sb.storage.from('payment-proofs').upload(proofPath, file, { upsert: false });
+    if (up.error) return say('Proof upload failed: ' + up.error.message);
+    const c = calcCommission2(amount);
+    const row = {
+      buyer_id: session.user.id,
+      seller_id: item.seller_id || null,
+      service_id: String(item.id || item.key || item.plan_key || ''),
+      service_title: item.name || item.title || 'StackOps Payment',
+      item_type: item.type || (item.plan_key ? 'plan' : 'service'),
+      plan_key: item.plan_key || item.key || null,
+      amount_inr: amount,
+      commission_percent: c.pct,
+      commission_inr: c.commission,
+      seller_payout_inr: c.sellerGets,
+      proof_path: proofPath,
+      reference_number: reference,
+      status: 'pending',
+      payout_status: 'pending'
+    };
+    const ins = await sb.from('manual_orders').insert(row);
+    if (ins.error) return say('Payment request failed: ' + ins.error.message);
+    document.querySelector('#soManualModalV2')?.classList.add('hidden');
+    say('Payment proof submitted. It will reflect in your account within 24–48 hours after admin verification.');
+    try { await renderManualOrdersAdminV2(); await renderSellerWalletV2(); } catch(e){}
+  }
+
+  async function renderManualOrdersAdminV2(){
+    if (!sb || !admin()) return;
+    let host = document.querySelector('#manualOrdersAdmin');
+    const adminPanel = document.querySelector('#admin');
+    if (!host && adminPanel) {
+      adminPanel.insertAdjacentHTML('beforeend', `<section class="panel"><div class="panel-head"><h2>Manual Payment Requests</h2><span class="chip">Middleman escrow</span></div><div id="manualOrdersAdmin" class="admin-list"></div></section>`);
+      host = document.querySelector('#manualOrdersAdmin');
+    }
+    if (!host) return;
+    host.innerHTML = '<div class="empty-state pulse-soft">Loading payment requests...</div>';
+    const { data, error } = await sb.from('manual_orders').select('*').order('created_at',{ascending:false}).limit(100);
+    if (error) { host.innerHTML = `<div class="empty-state"><b>Cannot load payments</b><br>${error.message}<br><small>Run NEXT_UPGRADE_MANUAL_PAYMENTS_SQL.sql</small></div>`; return; }
+    const rows = data || [];
+    host.innerHTML = rows.map(o => `<article class="order-card-premium ${o.status || 'pending'}">
+      <div class="order-top"><h3>${escapeHtml(o.service_title || 'Payment')}</h3><span class="status-pill ${o.status || 'pending'}">${escapeHtml(o.status || 'pending')}</span></div>
+      <div class="order-meta"><span><b>Amount:</b> ${rupee(o.amount_inr)}</span><span><b>UTR:</b> ${escapeHtml(o.reference_number || 'missing')}</span><span><b>Commission:</b> ${rupee(o.commission_inr)}</span><span><b>Seller payout:</b> ${rupee(o.seller_payout_inr)}</span></div>
+      <small>${new Date(o.created_at || Date.now()).toLocaleString()}</small>
+      <div class="proof-actions"><button class="mini" onclick="viewPaymentProofV2('${escapeHtml(o.proof_path || '')}')">View Proof</button>${o.status === 'pending' ? `<button class="mini success" onclick="approveManualOrderV2('${o.id}')">Approve</button><button class="mini danger" onclick="rejectManualOrderV2('${o.id}')">Reject</button>` : ''}${o.status === 'approved' && o.seller_id ? `<button class="mini" onclick="markSellerPaidV2('${o.id}')">Mark Seller Paid</button>` : ''}</div>
+    </article>`).join('') || '<div class="empty-state">No manual payment requests yet.</div>';
+  }
+
+  window.viewPaymentProofV2 = async function(path){ const url = await signedProofUrl(path); if (url) window.open(url, '_blank'); else say('Proof unavailable'); };
+  window.approveManualOrderV2 = async function(id){
+    if (!sb || !admin()) return;
+    const { data: order } = await sb.from('manual_orders').select('*').eq('id',id).single();
+    const { error } = await sb.from('manual_orders').update({status:'approved', approved_at:new Date().toISOString()}).eq('id',id);
+    if (error) return say(error.message);
+    if (order?.buyer_id && order?.item_type === 'plan') {
+      await sb.from('profiles').update({plan_key:order.plan_key || 'premium', is_verified:true}).eq('id', order.buyer_id).then(undefined,()=>{});
+    }
+    if (order?.seller_id) {
+      const { data: seller } = await sb.from('profiles').select('pending_payout_inr,total_earned_inr').eq('id', order.seller_id).single().then(undefined,()=>({data:null}));
+      await sb.from('profiles').update({
+        pending_payout_inr: Number(seller?.pending_payout_inr||0) + Number(order.seller_payout_inr||0),
+        total_earned_inr: Number(seller?.total_earned_inr||0) + Number(order.seller_payout_inr||0)
+      }).eq('id', order.seller_id).then(undefined,()=>{});
+    }
+    await sb.from('notifications').insert({user_id:order?.buyer_id, type:'payment_approved', content:'Your payment was approved. Access is now active.'}).then(undefined,()=>{});
+    say('Payment approved. Buyer access activated.');
+    renderManualOrdersAdminV2();
+  };
+  window.rejectManualOrderV2 = async function(id){
+    if (!sb || !admin()) return;
+    const { data: order } = await sb.from('manual_orders').select('buyer_id').eq('id',id).single().then(undefined,()=>({data:null}));
+    const { error } = await sb.from('manual_orders').update({status:'rejected'}).eq('id',id);
+    if (error) return say(error.message);
+    if (order?.buyer_id) await sb.from('notifications').insert({user_id:order.buyer_id, type:'payment_rejected', content:'Your payment proof was rejected. Please upload a clearer screenshot with UTR.'}).then(undefined,()=>{});
+    say('Payment rejected'); renderManualOrdersAdminV2();
+  };
+  window.markSellerPaidV2 = async function(id){
+    if (!sb || !admin()) return;
+    const { data: order } = await sb.from('manual_orders').select('*').eq('id',id).single();
+    const { error } = await sb.from('manual_orders').update({payout_status:'paid', payout_paid_at:new Date().toISOString()}).eq('id',id);
+    if (error) return say(error.message);
+    if (order?.seller_id) {
+      const { data: seller } = await sb.from('profiles').select('pending_payout_inr,paid_payout_inr').eq('id', order.seller_id).single().then(undefined,()=>({data:null}));
+      await sb.from('profiles').update({
+        pending_payout_inr: Math.max(0, Number(seller?.pending_payout_inr||0) - Number(order.seller_payout_inr||0)),
+        paid_payout_inr: Number(seller?.paid_payout_inr||0) + Number(order.seller_payout_inr||0)
+      }).eq('id', order.seller_id).then(undefined,()=>{});
+    }
+    say('Seller payout marked paid'); renderManualOrdersAdminV2();
+  };
+
+  async function renderSellerWalletV2(){
+    if (!sb || !session?.user) return;
+    let host = document.querySelector('#sellerWalletPanel');
+    const market = document.querySelector('#market');
+    if (!host && market) {
+      market.insertAdjacentHTML('beforeend', `<section id="sellerWalletPanel" class="panel"><div class="panel-head"><h2>Seller Wallet</h2><span class="chip">Earnings</span></div><div id="sellerWalletBody"></div></section>`);
+      host = document.querySelector('#sellerWalletPanel');
+    }
+    const body = document.querySelector('#sellerWalletBody'); if (!body) return;
+    const { data } = await sb.from('manual_orders').select('*').eq('seller_id', session.user.id).order('created_at',{ascending:false}).limit(50).then(undefined,()=>({data:[]}));
+    const rows = data || [];
+    const approved = rows.filter(x=>x.status==='approved');
+    const pendingPay = approved.filter(x=>x.payout_status!=='paid').reduce((a,x)=>a+Number(x.seller_payout_inr||0),0);
+    const paid = approved.filter(x=>x.payout_status==='paid').reduce((a,x)=>a+Number(x.seller_payout_inr||0),0);
+    body.innerHTML = `<div class="wallet-grid"><div class="wallet-stat"><b>${rupee(pendingPay)}</b><small>Pending payout</small></div><div class="wallet-stat"><b>${rupee(paid)}</b><small>Paid out</small></div><div class="wallet-stat"><b>${approved.length}</b><small>Approved orders</small></div></div>${rows.slice(0,6).map(o=>`<div class="manual-order-card ${o.status}"><b>${escapeHtml(o.service_title||'Order')}</b><small>${rupee(o.seller_payout_inr)} payout · ${escapeHtml(o.status)} · ${escapeHtml(o.payout_status || 'pending payout')}</small></div>`).join('') || '<p class="muted">No seller orders yet.</p>'}`;
+  }
+
+  // Override all old payment hooks to manual UPI only.
+  window.buyPlan = async function(planKey){ const plan = (demo?.plans||[]).find(p=>p.key===planKey); if(!plan) return say('Plan not found'); if(Number(plan.price_inr||0)<=0) return say('Free plan is already available'); return openManualPaymentV2({id:plan.key,key:plan.key,plan_key:plan.key,type:'plan',name:`StackOps ${plan.name} Plan`,amount:Number(plan.price_inr||0)}); };
+  window.buy = async function(name, amount, type='service'){ return openManualPaymentV2({name,title:name,amount:Number(amount||0),type}); };
+  window.openManualPaymentForService = async function(id){
+    let svc = (demo?.services||[]).find(x=>String(x.id)===String(id));
+    if (sb && !svc) { const r = await sb.from('seller_services').select('*').eq('id', id).single().then(undefined,()=>({data:null})); svc = r.data; }
+    if (!svc) return say('Service not found');
+    return openManualPaymentV2({ ...svc, type:'service', amount:Number(svc.price_inr||svc.amount||0) });
+  };
+  try { startRazorpayCheckout = async function({name,amount,type='service',plan_key=null}){ return openManualPaymentV2({name,amount,type,plan_key}); }; } catch(e){}
+
+  const oldAdmin = window.renderAdmin || (typeof renderAdmin !== 'undefined' ? renderAdmin : null);
+  if (oldAdmin) { renderAdmin = async function(){ await oldAdmin?.(); setTimeout(renderManualOrdersAdminV2, 80); }; window.renderAdmin = renderAdmin; }
+  const oldSwitch2 = window.switchView || (typeof switchView !== 'undefined' ? switchView : null);
+  if (oldSwitch2) { switchView = function(id){ oldSwitch2(id); if(id==='admin') setTimeout(renderManualOrdersAdminV2,120); if(id==='market') setTimeout(renderSellerWalletV2,250); }; window.switchView = switchView; }
+  document.addEventListener('DOMContentLoaded', ()=>{ ensureModal2(); setTimeout(()=>{ renderManualOrdersAdminV2(); renderSellerWalletV2(); }, 1200); });
+})();
