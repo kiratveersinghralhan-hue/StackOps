@@ -1,4 +1,0 @@
-SQL REQUIRED: NO
-
-This update removes fake/demo services, demo teams, demo posts, and fake live feed content from the frontend.
-Actual sellers can still create real services. The live-looking online user counter remains enabled as requested.
