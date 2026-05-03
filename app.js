@@ -4,7 +4,7 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 let sb = null;
 let session = null;
 let me = null;
-let currentChannel = 'global';
+let currentChannel = 'dm-founder';
 let voiceJoined = false;
 const adminEmails = (cfg.ADMIN_EMAILS || []).map((e) => e.toLowerCase());
 
@@ -25,6 +25,14 @@ const demo = {
     { title:'Duo Rank Strategy', description:'Macro, agent pool and comm review', price_inr:999, status:'approved' },
     { title:'Team Scrim Analysis', description:'Full team VOD review + PDF plan', price_inr:2499, status:'approved' },
     { title:'Pro Trial Bootcamp', description:'3-day structured improvement plan', price_inr:5999, status:'approved' }
+  ],
+  plans: [
+    { key:'free', name:'Free', price_inr:0, desc:'Starter profile, squads, community and basic rewards' },
+    { key:'bronze', name:'Bronze', price_inr:199, desc:'Starter premium badge + small profile boost' },
+    { key:'silver', name:'Silver', price_inr:499, desc:'Silver title pack + priority squad visibility' },
+    { key:'gold', name:'Gold', price_inr:999, desc:'Gold profile glow + marketplace discovery boost' },
+    { key:'diamond', name:'Diamond', price_inr:2499, desc:'Elite banner pack + premium seller visibility' },
+    { key:'legend', name:'Legend', price_inr:5999, desc:'Top-tier identity pack + highest profile boost' }
   ],
   titles: [
     {name:'Rookie', xp:0, desc:'Default title for every new player'},
@@ -132,13 +140,14 @@ function wireUI() {
   $('#teamForm').addEventListener('submit', createTeam);
   $('#quickMatchBtn').onclick = () => { switchView('chat'); toast('Quick match room opened'); };
   $('#createPostBtn').onclick = createPost;
-  $('#sendMsgBtn').onclick = sendMessage;
-  $('#messageInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+  $('#sendMsgBtn') && ($('#sendMsgBtn').onclick = sendMessage);
+  $('#messageInput') && $('#messageInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
   $$('.channel').forEach(c => c.onclick = () => setChannel(c.dataset.channel));
   $('#applySellerBtn').onclick = applySeller;
-  $('#voiceBtn').onclick = joinVoice;
-  $('#muteBtn').onclick = () => toast('Muted preview');
-  $('#leaveVoiceBtn').onclick = leaveVoice;
+  $('#createVoiceRoomBtn') && ($('#createVoiceRoomBtn').onclick = createVoiceRoom);
+  $('#muteBtn') && ($('#muteBtn').onclick = () => toast('Muted'));
+  $('#leaveVoiceBtn') && ($('#leaveVoiceBtn').onclick = leaveVoice);
+  $('#copyVoiceInviteBtn') && ($('#copyVoiceInviteBtn').onclick = copyVoiceInvite);
   $('#equipFounder').onclick = equipFounderKit;
   $('#scrollTop').onclick = () => window.scrollTo({top:0, behavior:'smooth'});
   window.addEventListener('scroll', () => $('#scrollTop').classList.toggle('show', scrollY > 420));
@@ -151,6 +160,7 @@ function switchView(id) {
   $('#mobileMenu').classList.remove('open');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (id === 'chat') loadMessages();
+  if (id === 'voice') renderVoicePage();
   if (id === 'admin') renderAdmin();
 }
 
@@ -383,20 +393,110 @@ async function createPost() {
 }
 
 function renderServices() {
-  $('#serviceList').innerHTML = demo.services.map(s => `<article class="service-card"><span class="tag">Admin approved</span><h3>${s.title}</h3><p>${s.description}</p><h2>${money(s.price_inr)}</h2><small>Commission: ${money(commission(s.price_inr))}</small><button class="btn primary full" onclick="buy('${s.title.replace(/'/g,"\\'")}',${s.price_inr})">Book Now</button></article>`).join('');
-  const gmv = demo.services.reduce((a,s) => a + s.price_inr * 19, 0);
-  $('#gmvCounter').textContent = money(gmv);
+  renderPlans();
+  $('#serviceList').innerHTML = demo.services.map(s => `<article class="service-card"><span class="tag">Admin approved</span><h3>${s.title}</h3><p>${s.description}</p><h2>${money(s.price_inr)}</h2><small>Platform commission: ${money(commission(s.price_inr))}</small><button class="btn primary full" onclick="buy('${s.title.replace(/'/g,"\\'")}',${s.price_inr},'service')">Book Now</button></article>`).join('');
+  refreshPaymentGMV();
 }
-async function applySeller() {
-  if (needLogin()) return;
-  if (sb) await sb.from('seller_applications').insert({ user_id: session.user.id, status:'pending' }).catch(()=>{});
-  toast('Seller application sent for admin approval');
+
+function renderPlans() {
+  const el = $('#planList');
+  if (!el) return;
+  el.innerHTML = demo.plans.map(plan => `<article class="plan-card"><span class="tag">${plan.name}</span><h3>${plan.name}</h3><p>${plan.desc}</p><h2>${money(plan.price_inr)}</h2><button class="btn ${plan.price_inr ? 'primary' : 'dark'} full" onclick="buyPlan('${plan.key}')">${plan.price_inr ? 'Buy Plan' : 'Use Free'}</button></article>`).join('');
 }
-window.buy = (name, amount) => {
-  if (needLogin()) return;
-  if (!window.Razorpay || !cfg.RAZORPAY_KEY_ID || cfg.RAZORPAY_KEY_ID.includes('YOUR_')) return toast(`Add Razorpay key in config.js. Demo: ${name} ${money(amount)}`);
-  new Razorpay({ key:cfg.RAZORPAY_KEY_ID, amount:amount*100, currency:'INR', name:'StackOps', description:name, handler:async (res)=>{ if(sb) await sb.from('payments').insert({ buyer_id:session.user.id, amount_inr:amount, commission_inr:commission(amount), provider:'razorpay', provider_payment_id:res.razorpay_payment_id, status:'paid' }).catch(()=>{}); toast('Payment success'); }}).open();
+
+async function refreshPaymentGMV(){
+  const demoGmv = demo.services.reduce((a,s) => a + s.price_inr * 19, 0);
+  let total = demoGmv;
+  if (sb) {
+    try {
+      const { data } = await sb.from('payments').select('amount_inr,status');
+      if (data?.length) total = data.filter(p => p.status === 'paid' || p.status === 'captured').reduce((a,p)=>a+Number(p.amount_inr||0),0);
+    } catch(e) {}
+  }
+  $('#gmvCounter') && ($('#gmvCounter').textContent = money(total));
+}
+
+window.buyPlan = async (planKey) => {
+  const plan = demo.plans.find(p => p.key === planKey);
+  if (!plan) return toast('Plan not found');
+  if (plan.price_inr <= 0) return toast('Free plan is already available');
+  return startRazorpayCheckout({ name:`StackOps ${plan.name} Plan`, amount:plan.price_inr, type:'plan', plan_key:plan.key });
 };
+
+window.buy = (name, amount, type='service') => startRazorpayCheckout({ name, amount, type });
+
+async function startRazorpayCheckout({ name, amount, type='service', plan_key=null }) {
+  if (needLogin()) return;
+  if (!amount || amount < 1) return toast('Invalid amount');
+
+  const paymentRow = {
+    buyer_id: session.user.id,
+    amount_inr: amount,
+    commission_inr: commission(amount),
+    provider: 'razorpay',
+    status: 'created',
+    item_name: name,
+    item_type: type,
+    plan_key
+  };
+
+  let localPaymentId = null;
+  if (sb) {
+    try {
+      const { data } = await sb.from('payments').insert(paymentRow).select('id').single();
+      localPaymentId = data?.id || null;
+    } catch (err) {
+      console.warn('Payment pre-record failed:', err?.message || err);
+    }
+  }
+
+  const keyMissing = !window.Razorpay || !cfg.RAZORPAY_KEY_ID || cfg.RAZORPAY_KEY_ID.includes('YOUR_');
+  if (keyMissing) {
+    const link = cfg.RAZORPAY_PAYMENT_LINK || 'https://razorpay.me/';
+    toast('Razorpay key missing. Opening payment link fallback.');
+    window.open(link, '_blank');
+    return;
+  }
+
+  const options = {
+    key: cfg.RAZORPAY_KEY_ID,
+    amount: Math.round(amount * 100),
+    currency: 'INR',
+    name: cfg.RAZORPAY_BUSINESS_NAME || 'StackOps',
+    description: name,
+    image: 'stackops-luxury-logo.webp',
+    notes: { stackops_payment_id: localPaymentId || '', item_type: type, plan_key: plan_key || '' },
+    prefill: { email: session.user.email || cfg.RAZORPAY_CONTACT_EMAIL || '' },
+    theme: { color: '#ff4655' },
+    handler: async (res) => {
+      if (sb) {
+        try {
+          await sb.from('payments').update({
+            provider_payment_id: res.razorpay_payment_id,
+            status: 'paid',
+            raw_response: res
+          }).eq('id', localPaymentId);
+          if (type === 'plan' && plan_key) {
+            await sb.from('profiles').update({ plan_key }).eq('id', session.user.id).catch(()=>{});
+            me = { ...me, plan_key };
+          }
+        } catch (err) {
+          console.warn('Payment update failed:', err?.message || err);
+        }
+      }
+      toast(`Payment successful: ${money(amount)}`);
+      await awardXP(80, 'Payment completed').catch(()=>{});
+      refreshPaymentGMV();
+      updateProfileUI();
+    },
+    modal: { ondismiss: async () => {
+      if (sb && localPaymentId) await sb.from('payments').update({ status:'cancelled' }).eq('id', localPaymentId).catch(()=>{});
+      toast('Payment cancelled');
+    }}
+  };
+
+  new Razorpay(options).open();
+}
 
 function renderRewards() {
   const currentTitle = isAdmin() ? (me?.title || 'Founder') : (me?.title || 'Rookie');
@@ -474,7 +574,10 @@ window.claimQuest = async (xp, name) => {
 function setChannel(channel) {
   currentChannel = channel;
   $$('.channel').forEach(c => c.classList.toggle('active', c.dataset.channel === channel));
-  $('#chatTitle').textContent = channel.startsWith('dm-') ? '@ ' + channel.replace('dm-','') : '# ' + channel;
+  const label = channel.startsWith('dm-') ? '@ ' + channel.replace('dm-','') : '# ' + channel;
+  $('#chatTitle') && ($('#chatTitle').textContent = label);
+  $('#activeConversationLabel') && ($('#activeConversationLabel').textContent = label.replace('@ ', '').replace('# ', ''));
+  $('#chatSubline') && ($('#chatSubline').textContent = channel.startsWith('dm-') ? 'Direct message • online' : 'Public group chat • live room');
   loadMessages();
 }
 async function loadMessages() {
@@ -490,8 +593,9 @@ function appendMessage(m) {
   const el = document.createElement('div');
   el.className = 'message' + (m.me ? ' me' : '');
   el.innerHTML = `<small>${m.sender_name || 'Player'} • ${m.channel || currentChannel}</small>${escapeHtml(m.content)}`;
-  $('#messages').appendChild(el);
-  $('#messages').scrollTop = $('#messages').scrollHeight;
+  const msgBox = $('#messages'); if (!msgBox) return;
+  msgBox.appendChild(el);
+  msgBox.scrollTop = msgBox.scrollHeight;
 }
 async function sendMessage() {
   if (needLogin()) return;
@@ -507,8 +611,66 @@ function subscribeRealtime() {
     if (m.channel === currentChannel && m.sender_id !== session?.user?.id) appendMessage({ sender_name:m.sender_name || 'Player', content:m.content, channel:m.channel });
   }).subscribe();
 }
-function joinVoice() { if (needLogin()) return; voiceJoined = true; $('#voiceRoom').classList.remove('hidden'); $('#voiceStatus').textContent = 'Connected preview'; toast('Voice room joined'); }
-function leaveVoice() { voiceJoined = false; $('#voiceRoom').classList.add('hidden'); toast('Left voice room'); }
+function joinVoice(roomName='Voice Room') {
+  if (needLogin()) return;
+  voiceJoined = true;
+  localStorage.stackopsActiveVoice = roomName;
+  renderVoicePage();
+  toast('Joined ' + roomName);
+}
+function leaveVoice() {
+  voiceJoined = false;
+  localStorage.removeItem('stackopsActiveVoice');
+  renderVoicePage();
+  toast('Left voice room');
+}
+function voiceRooms(){
+  const base = [
+    {id:'v-global', name:'Global Open VC', privacy:'public', online:12, topic:'Open community voice'},
+    {id:'v-valorant', name:'Valorant Stack VC', privacy:'public', online:8, topic:'Find teammates and scrims'},
+    {id:'v-coach', name:'Coach Review Room', privacy:'private', online:2, topic:'Invite-only coaching'},
+    {id:'v-team', name:'Team Private VC', privacy:'private', online:5, topic:'Private squad comms'}
+  ];
+  const custom = JSON.parse(localStorage.stackopsVoiceRooms || '[]');
+  return [...custom, ...base];
+}
+function renderVoicePage(){
+  const pub = $('#publicVoiceRooms'), priv = $('#privateVoiceRooms');
+  if(!pub || !priv) return;
+  const active = localStorage.stackopsActiveVoice || '';
+  const card = r => `<article class="voice-room-card ${active===r.name?'active':''}"><div><b>${r.privacy==='private'?'🔒':'🌐'} ${escapeHtml(r.name)}</b><small>${escapeHtml(r.topic || 'Voice room')} • ${r.online || 1} online</small></div><div class="voice-actions"><button class="mini" onclick="joinVoiceById('${escapeHtml(r.id)}')">${active===r.name?'Connected':'Join'}</button><button class="mini" onclick="copySpecificVoiceInvite('${escapeHtml(r.id)}')">Invite</button></div></article>`;
+  pub.innerHTML = voiceRooms().filter(r=>r.privacy==='public').map(card).join('');
+  priv.innerHTML = voiceRooms().filter(r=>r.privacy==='private').map(card).join('');
+  const activeBox = $('#activeVoiceCard');
+  if(active){
+    activeBox?.classList.remove('hidden');
+    $('#activeVoiceName') && ($('#activeVoiceName').textContent = active);
+    $('#activeVoiceStatus') && ($('#activeVoiceStatus').textContent = 'Connected • mic preview only. Use your device/Discord/WhatsApp call for real audio until WebRTC is added.');
+  } else {
+    activeBox?.classList.add('hidden');
+  }
+}
+function createVoiceRoom(){
+  if(needLogin()) return;
+  const name = ($('#voiceRoomName')?.value || '').trim();
+  if(!name) return toast('Enter room name');
+  const privacy = $('#voiceRoomPrivacy')?.value || 'public';
+  const id = 'voice-' + Date.now();
+  const arr = JSON.parse(localStorage.stackopsVoiceRooms || '[]');
+  arr.unshift({id,name,privacy,online:1,topic: privacy==='private' ? 'Private invite room' : 'Public voice room'});
+  localStorage.stackopsVoiceRooms = JSON.stringify(arr);
+  $('#voiceRoomName').value = '';
+  renderVoicePage();
+  toast('Voice room created');
+}
+function copyVoiceInvite(){
+  const active = localStorage.stackopsActiveVoice || 'voice';
+  navigator.clipboard?.writeText(`${location.origin}${location.pathname}?voice=${encodeURIComponent(active)}`);
+  toast('Voice invite copied');
+}
+window.joinVoiceById = function(id){ const room = voiceRooms().find(r => r.id === id); if(room) joinVoice(room.name); };
+window.copySpecificVoiceInvite = function(id){ navigator.clipboard?.writeText(`${location.origin}${location.pathname}?voice=${encodeURIComponent(id)}`); toast('Voice invite copied'); };
+window.joinVoice = joinVoice;
 
 async function renderAdmin() {
   if (!isAdmin()) return;
@@ -881,12 +1043,8 @@ document.addEventListener('DOMContentLoaded', init);
   setChannel = function(channel){ oldSetChannel(channel); renderDiscordServers(); };
   const oldLoadMessages = loadMessages;
   loadMessages = async function(){ await oldLoadMessages(); renderDiscordServers(); renderVoiceRooms(); };
-  function renderVoiceRooms(){
-    const main = document.querySelector('.chat-main'); if(!main || $('#voiceRoomGrid')) return;
-    const head = document.querySelector('.chat-head');
-    head?.insertAdjacentHTML('afterend', `<div class="voice-room-grid" id="voiceRoomGrid"><button class="voice-tile" onclick="joinVoiceRoom('Lobby VC')"><b>Lobby VC</b><small>Public voice · 12 online</small></button><button class="voice-tile" onclick="joinVoiceRoom('Team VC')"><b>Team VC</b><small>Private squad voice</small></button></div>`);
-  }
-  window.joinVoiceRoom = function(name){ if(needLogin()) return; localStorage.stackopsVoiceJoined='1'; joinVoice(); $('#voiceStatus').textContent = `Connected to ${name}`; addLiveEvent(`Joined ${name}`, me?.username || 'Player', 'voice'); };
+  function renderVoiceRooms(){ renderVoicePage(); }
+  window.joinVoiceRoom = function(name){ if(needLogin()) return; localStorage.stackopsVoiceJoined='1'; joinVoice(name); addLiveEvent(`Joined ${name}`, me?.username || 'Player', 'voice'); };
 
   const oldRenderAdmin = renderAdmin;
   renderAdmin = async function(){
@@ -927,5 +1085,5 @@ document.addEventListener('DOMContentLoaded', init);
 
   const oldRenderAll2 = renderAll;
   renderAll = function(){ oldRenderAll2(); renderLiveCenter(); renderDiscordServers(); renderVoiceRooms(); refreshTrueCounters(); };
-  document.addEventListener('DOMContentLoaded', () => { setTimeout(()=>{ renderLiveCenter(); renderDiscordServers(); renderChallengeTracker(); refreshTrueCounters(); setInterval(refreshTrueCounters, 12000); }, 900); });
+  document.addEventListener('DOMContentLoaded', () => { setTimeout(()=>{ renderLiveCenter(); renderDiscordServers(); renderChallengeTracker(); renderVoicePage(); refreshTrueCounters(); setInterval(refreshTrueCounters, 12000); }, 900); });
 })();

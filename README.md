@@ -52,3 +52,12 @@ Upload the full folder to any static host.
 SQL REQUIRED: YES — run `retention-final-safe.sql` once in Supabase. It is safe to run multiple times and does not delete data.
 
 Added: invite rewards, daily streaks, leaderboard, next-unlock panel, social proof feed, XP triggers, safer login state refresh, and smoother interactions.
+
+## Razorpay full system added
+
+Files added:
+- `razorpay-full-safe.sql` — safe payment table/policy migration
+- `RAZORPAY_LIVE_SETUP.md` — exact setup steps
+- `supabase-edge-function-razorpay-webhook.js` — optional production webhook template
+
+Your money goes to the Razorpay account whose `RAZORPAY_KEY_ID` you paste into `config.js`.

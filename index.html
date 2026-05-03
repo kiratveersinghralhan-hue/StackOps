@@ -47,7 +47,8 @@
       <button class="nav" data-view="account">My Account</button>
       <button class="nav" data-view="teams">Teams</button>
       <button class="nav" data-view="community">Community</button>
-      <button class="nav" data-view="chat">Chat</button>
+      <button class="nav" data-view="chat">Messages</button>
+      <button class="nav" data-view="voice">Voice Rooms</button>
       <button class="nav" data-view="market">Marketplace</button>
       <button class="nav" data-view="rewards">Rewards</button>
       <button class="nav admin-only hidden" data-view="admin">Admin</button>
@@ -65,7 +66,8 @@
     <button class="nav" data-view="account">My Account</button>
     <button class="nav" data-view="teams">Teams</button>
     <button class="nav" data-view="community">Community</button>
-    <button class="nav" data-view="chat">Chat</button>
+    <button class="nav" data-view="chat">Messages</button>
+    <button class="nav" data-view="voice">Voice Rooms</button>
     <button class="nav" data-view="market">Marketplace</button>
     <button class="nav" data-view="rewards">Rewards</button>
     <button class="nav admin-only hidden" data-view="admin">Admin</button>
@@ -177,30 +179,60 @@
     </section>
 
     <section id="chat" class="view">
-      <div class="page-head"><span>Comms</span><h1>Direct chat, group rooms and voice UI.</h1></div>
-      <div class="chat-layout">
-        <aside class="chat-sidebar panel">
-          <h3>Groups</h3>
-          <button class="channel active" data-channel="global"># global</button>
-          <button class="channel" data-channel="valorant"># valorant</button>
-          <button class="channel" data-channel="marketplace"># marketplace</button>
-          <button class="channel" data-channel="team-room"># team-room</button>
-          <h3>Direct</h3>
-          <button class="channel" data-channel="dm-founder">@ Founder</button>
-          <button class="channel" data-channel="dm-coach">@ Coach</button>
+      <div class="page-head"><span>Messages</span><h1>Simple direct messages.</h1><p>Instagram-style inbox: choose a person or room, see exactly where you are messaging, then send.</p></div>
+      <div class="messenger-shell">
+        <aside class="dm-sidebar panel">
+          <div class="panel-head"><h2>Inbox</h2><span class="chip">DMs</span></div>
+          <button class="dm-thread channel active" data-channel="dm-founder"><div class="avatar sm">F</div><div><b>Founder</b><small>Direct message</small></div></button>
+          <button class="dm-thread channel" data-channel="dm-coach"><div class="avatar sm">C</div><div><b>Coach</b><small>Private coaching chat</small></div></button>
+          <button class="dm-thread channel" data-channel="global"><div class="avatar sm">#</div><div><b>Global Arena</b><small>Public group chat</small></div></button>
+          <button class="dm-thread channel" data-channel="valorant"><div class="avatar sm">V</div><div><b>Valorant Scrims</b><small>Public squad chat</small></div></button>
         </aside>
-        <section class="chat-main panel">
-          <div class="chat-head"><div><h2 id="chatTitle"># global</h2><small>Realtime messages when Supabase table is enabled</small></div><button class="btn voice" id="voiceBtn">🎙️ Join Voice</button></div>
-          <div id="voiceRoom" class="voice-room hidden"><span>Voice room UI</span><b id="voiceStatus">Muted preview</b><div><button class="mini" id="muteBtn">Mute</button><button class="mini" id="leaveVoiceBtn">Leave</button></div></div>
-          <div id="messages" class="messages"></div>
-          <div class="chat-input"><input id="messageInput" placeholder="Message this room..."><button class="btn primary" id="sendMsgBtn">Send</button></div>
+        <section class="chat-main panel messenger-panel">
+          <div class="chat-head"><div><h2 id="chatTitle">@ Founder</h2><small id="chatSubline">Direct message • online</small></div><span class="chat-state">Text only</span></div>
+          <div class="message-helper"><b>You are messaging:</b> <span id="activeConversationLabel">Founder</span></div>
+          <div id="messages" class="messages instagram-messages"></div>
+          <div class="chat-input"><input id="messageInput" placeholder="Write a message..."><button class="btn primary" id="sendMsgBtn">Send</button></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="voice" class="view">
+      <div class="page-head"><span>Voice Rooms</span><h1>Public and private voice rooms.</h1><p>Discord + WhatsApp style: create a room, share the invite, join, mute, and leave with clear status.</p></div>
+      <div class="voice-layout">
+        <section class="panel voice-control-panel">
+          <div class="panel-head"><h2>Create Voice Room</h2><span class="chip">Public / Private</span></div>
+          <div class="server-tools voice-create-box">
+            <input id="voiceRoomName" placeholder="Room name e.g. Premier Squad VC">
+            <select id="voiceRoomPrivacy"><option value="public">Public</option><option value="private">Private</option></select>
+            <button class="btn primary" id="createVoiceRoomBtn">Create Room</button>
+          </div>
+          <div id="activeVoiceCard" class="active-voice-card hidden">
+            <small>Current voice room</small>
+            <h2 id="activeVoiceName">Not connected</h2>
+            <p id="activeVoiceStatus">Join a room to start voice preview.</p>
+            <div class="voice-actions"><button class="mini" id="muteBtn">Mute</button><button class="mini danger" id="leaveVoiceBtn">Leave</button><button class="mini" id="copyVoiceInviteBtn">Copy Invite</button></div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Public Rooms</h2><span class="pulse"></span></div>
+          <div id="publicVoiceRooms" class="voice-room-list"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Private Rooms</h2><span class="chip">Invite only</span></div>
+          <div id="privateVoiceRooms" class="voice-room-list"></div>
         </section>
       </div>
     </section>
 
     <section id="market" class="view">
       <div class="page-head"><span>Marketplace</span><h1>Admin-approved sellers only.</h1><button class="btn primary" id="applySellerBtn">Apply to Sell</button></div>
-      <div class="market-stats"><div><b id="gmvCounter">₹0</b><span>demo GMV</span></div><div><b>7%-30%</b><span>commission ladder</span></div><div><b>AI + Admin</b><span>verification flow</span></div></div>
+      <div class="market-stats"><div><b id="gmvCounter">₹0</b><span>tracked GMV</span></div><div><b>7%-30%</b><span>commission ladder</span></div><div><b>Razorpay</b><span>test/live ready</span></div></div>
+      <section class="panel payment-panel">
+        <div class="panel-head"><h2>Premium Checkout</h2><span class="chip">Money to your Razorpay</span></div>
+        <p class="muted">Use test key first. When ready, paste live key in <b>config.js</b>. Your Razorpay account decides where money settles.</p>
+        <div id="planList" class="plans compact-plans"></div>
+      </section>
       <div id="serviceList" class="grid cards"></div>
     </section>
 
