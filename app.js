@@ -2534,3 +2534,129 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(()=>{ renderServices(); renderManualOrdersAdmin(); }, 1200);
   });
 })();
+
+/* ==========================================================
+   STACKOPS FINAL PATCH: Manual UPI payments only (no Razorpay)
+   ========================================================== */
+(function(){
+  function stackopsManualCommission(amount){
+    const n = Number(amount || 0);
+    const rules = (window.STACKOPS_CONFIG && window.STACKOPS_CONFIG.COMMISSION_RULES) || [];
+    const rule = rules.find(r => n >= Number(r.min||0) && n <= Number(r.max||999999999)) || { percent: 15 };
+    const pct = Number(rule.percent || 15);
+    const commission = Math.round(n * pct / 100);
+    return { pct, commission, sellerGets: Math.max(0, n - commission) };
+  }
+  function stackopsMoney(v){
+    try { return typeof money === 'function' ? money(v) : `₹${Number(v||0).toLocaleString('en-IN')}`; }
+    catch(e){ return `₹${v}`; }
+  }
+  function stackopsToast(msg){
+    try { if (typeof toast === 'function') return toast(msg); } catch(e) {}
+    alert(msg);
+  }
+  function stackopsNeedLogin(){
+    try { return typeof needLogin === 'function' ? needLogin() : !session?.user; } catch(e) { return !session?.user; }
+  }
+  function stackopsEnsureManualModal(){
+    if (document.querySelector('#stackopsManualPayModal')) return;
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="stackopsManualPayModal" class="manual-modal hidden">
+        <div class="manual-modal-card">
+          <button class="manual-modal-close" id="stackopsManualClose" aria-label="Close">×</button>
+          <span class="chip">Manual UPI payment</span>
+          <h2 id="stackopsPayTitle">Complete Payment</h2>
+          <p class="muted">Pay to StackOps first. Your payment will reflect in your account within <b>24–48 hours</b> after admin verification.</p>
+          <div class="manual-pay-grid">
+            <div class="qr-box"><img id="stackopsPayQr" alt="UPI QR Code"></div>
+            <div>
+              <p>Amount</p><h2 id="stackopsPayAmount">₹0</h2>
+              <p>UPI ID</p><div class="copy-line"><b id="stackopsPayUpi">ralhanx@ptaxis</b><button class="mini" id="stackopsCopyUpi">Copy</button></div>
+              <p class="muted">Screenshot must clearly show the UPI reference / UTR number.</p>
+            </div>
+          </div>
+          <label class="field-label">Reference / UTR number</label>
+          <input id="stackopsPayRef" type="text" placeholder="Enter UPI reference / UTR number" autocomplete="off">
+          <label class="field-label">Upload payment screenshot / proof</label>
+          <input id="stackopsPayProof" type="file" accept="image/*,.pdf">
+          <button class="btn primary full" id="stackopsSubmitManualPay">Submit Payment Proof</button>
+          <p class="muted small">Admin will approve/reject after checking proof. Keep your screenshot until approval.</p>
+        </div>
+      </div>`);
+    document.querySelector('#stackopsManualClose')?.addEventListener('click', ()=>document.querySelector('#stackopsManualPayModal')?.classList.add('hidden'));
+    document.querySelector('#stackopsCopyUpi')?.addEventListener('click', async ()=>{
+      const upi = (window.STACKOPS_CONFIG && window.STACKOPS_CONFIG.MANUAL_UPI_ID) || 'ralhanx@ptaxis';
+      try { await navigator.clipboard.writeText(upi); stackopsToast('UPI ID copied'); } catch(e) { stackopsToast(upi); }
+    });
+    document.querySelector('#stackopsSubmitManualPay')?.addEventListener('click', stackopsSubmitManualPayment);
+  }
+  let currentManualItem = null;
+  async function stackopsOpenManualPayment(item){
+    if (stackopsNeedLogin()) return;
+    currentManualItem = item || {};
+    stackopsEnsureManualModal();
+    const upi = (window.STACKOPS_CONFIG && window.STACKOPS_CONFIG.MANUAL_UPI_ID) || 'ralhanx@ptaxis';
+    const qr = (window.STACKOPS_CONFIG && window.STACKOPS_CONFIG.MANUAL_UPI_QR_URL) || 'upi-qr.jpeg';
+    document.querySelector('#stackopsPayTitle').textContent = item.name || item.title || 'StackOps Payment';
+    document.querySelector('#stackopsPayAmount').textContent = stackopsMoney(item.amount || item.price_inr || 0);
+    document.querySelector('#stackopsPayUpi').textContent = upi;
+    document.querySelector('#stackopsPayQr').src = qr;
+    const ref = document.querySelector('#stackopsPayRef'); if (ref) ref.value = '';
+    const file = document.querySelector('#stackopsPayProof'); if (file) file.value = '';
+    document.querySelector('#stackopsManualPayModal')?.classList.remove('hidden');
+  }
+  async function stackopsSubmitManualPayment(){
+    if (stackopsNeedLogin()) return;
+    const item = currentManualItem || {};
+    const amount = Number(item.amount || item.price_inr || 0);
+    const reference = document.querySelector('#stackopsPayRef')?.value?.trim();
+    const file = document.querySelector('#stackopsPayProof')?.files?.[0];
+    if (!amount || amount < 1) return stackopsToast('Invalid payment amount');
+    if (!reference || reference.length < 6) return stackopsToast('Enter valid UPI reference / UTR number');
+    if (!file) return stackopsToast('Upload payment screenshot / proof first');
+    if (!sb || !session?.user) return stackopsToast('Supabase not ready. Login again and retry.');
+
+    const calc = stackopsManualCommission(amount);
+    const safeName = (file.name || 'proof.png').replace(/[^a-z0-9_.-]/gi,'-');
+    const proofPath = `${session.user.id}/${Date.now()}-${safeName}`;
+    const uploaded = await sb.storage.from('payment-proofs').upload(proofPath, file, { upsert:false });
+    if (uploaded.error) return stackopsToast('Proof upload failed: ' + uploaded.error.message);
+
+    const row = {
+      buyer_id: session.user.id,
+      seller_id: item.seller_id || null,
+      service_id: String(item.id || item.plan_key || item.key || ''),
+      service_title: item.name || item.title || 'StackOps Payment',
+      item_type: item.type || 'plan',
+      plan_key: item.plan_key || item.key || null,
+      amount_inr: amount,
+      commission_percent: calc.pct,
+      commission_inr: calc.commission,
+      seller_payout_inr: calc.sellerGets,
+      proof_path: proofPath,
+      reference_number: reference,
+      status: 'pending',
+      payout_status: 'pending'
+    };
+    const inserted = await sb.from('manual_orders').insert(row);
+    if (inserted.error) return stackopsToast('Payment request failed: ' + inserted.error.message);
+    document.querySelector('#stackopsManualPayModal')?.classList.add('hidden');
+    stackopsToast('Payment proof submitted. It will reflect in your account within 24–48 hours after admin verification.');
+    try { if (typeof renderManualOrdersAdmin === 'function') renderManualOrdersAdmin(); } catch(e) {}
+  }
+
+  window.buyPlan = async function(planKey){
+    const plan = (demo?.plans || []).find(p => p.key === planKey);
+    if (!plan) return stackopsToast('Plan not found');
+    if (Number(plan.price_inr || 0) <= 0) return stackopsToast('Free plan is already available');
+    return stackopsOpenManualPayment({
+      id: plan.key, key: plan.key, plan_key: plan.key, type:'plan',
+      name: `StackOps ${plan.name} Plan`, amount: Number(plan.price_inr || 0)
+    });
+  };
+  window.buy = async function(name, amount, type='service'){
+    return stackopsOpenManualPayment({ name, title:name, amount:Number(amount||0), type });
+  };
+  try { startRazorpayCheckout = async function({ name, amount, type='service', plan_key=null }){ return stackopsOpenManualPayment({ name, amount, type, plan_key }); }; } catch(e) {}
+  document.addEventListener('DOMContentLoaded', stackopsEnsureManualModal);
+})();
