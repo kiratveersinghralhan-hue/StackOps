@@ -127,37 +127,77 @@ async function init() {
 
 async function applySeller() {
   if (needLogin()) return;
+
   const alreadySeller = me?.is_seller === true || me?.seller_status === 'approved' || localStorage.stackopsSellerApproved === '1';
   if (alreadySeller) {
     toast('Seller account already active');
     switchView('market');
     return;
   }
+
   const btn = $('#applySellerBtn');
   const oldText = btn?.textContent || 'Apply to Sell';
   if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
 
-  let submitted = false;
-  if (sb && session) {
-    try {
-      // Do not fail the user if a duplicate request already exists.
-      const { error } = await sb.from('seller_applications').insert({
-        user_id: session.user.id,
-        status: 'pending',
-        note: 'Seller application submitted from StackOps marketplace'
-      });
-      if (!error) submitted = true;
-      else console.warn('seller_applications insert:', error.message);
-    } catch (err) {
-      console.warn('Seller application failed:', err?.message || err);
-    }
-  }
+  try {
+    const { data: authData, error: authErr } = await sb.auth.getUser();
+    const user = authData?.user || session?.user;
+    if (authErr || !user) throw new Error(authErr?.message || 'Login first');
 
-  localStorage.stackopsSellerApplied = '1';
-  toast(submitted ? 'Seller application submitted for admin approval' : 'Seller application saved locally. Admin can approve after DB sync.');
-  refreshSellerButton();
-  renderAdmin();
-  if (btn) { btn.disabled = false; btn.textContent = oldText; }
+    const { data: profile } = await sb
+      .from('profiles')
+      .select('username,display_name,seller_status,is_seller')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile?.is_seller || profile?.seller_status === 'approved') {
+      localStorage.stackopsSellerApproved = '1';
+      toast('Seller account already active');
+      refreshSellerButton();
+      return;
+    }
+
+    const { data: existing, error: existingErr } = await sb
+      .from('seller_applications')
+      .select('id,status')
+      .eq('user_id', user.id)
+      .neq('status', 'rejected')
+      .maybeSingle();
+
+    if (!existingErr && existing?.id) {
+      localStorage.stackopsSellerApplied = '1';
+      await sb.from('profiles').update({ seller_status: existing.status || 'pending' }).eq('id', user.id);
+      toast(existing.status === 'approved' ? 'Seller already approved' : 'Application already pending');
+      refreshSellerButton();
+      renderAdmin();
+      return;
+    }
+
+    const applicantName = profile?.display_name || profile?.username || user.email || 'StackOps Player';
+
+    const { error: insertError } = await sb.from('seller_applications').insert([{
+      user_id: user.id,
+      applicant_email: user.email || '',
+      applicant_name: applicantName,
+      note: 'Seller application from StackOps marketplace',
+      status: 'pending'
+    }]);
+
+    if (insertError) throw insertError;
+
+    await sb.from('profiles').update({ seller_status: 'pending' }).eq('id', user.id);
+    localStorage.stackopsSellerApplied = '1';
+    toast('Seller application submitted for admin approval');
+    addLiveEvent('Submitted seller application', applicantName, 'seller');
+    refreshSellerButton();
+    renderAdmin();
+  } catch (err) {
+    console.error('Apply seller failed:', err);
+    toast('Could not submit seller application: ' + (err?.message || err));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
+    refreshSellerButton();
+  }
 }
 
 function refreshSellerButton() {
@@ -323,13 +363,13 @@ async function loadMe() {
   let { data } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if (!data) {
     const profile = { id: session.user.id, username: email.split('@')[0], display_name: email.split('@')[0], ...defaultProfileFor(email) };
-    await sb.from('profiles').upsert(profile, { onConflict: 'id' }).catch(()=>{});
+    await sb.from('profiles').upsert(profile, { onConflict: 'id' }).then(undefined, ()=>{});
     data = profile;
   }
   me = { ...defaultProfileFor(email), ...data };
   if (!me.title || !me.badge || !me.selected_banner_key) {
     const patch = defaultProfileFor(email);
-    await sb.from('profiles').update({ title: me.title || patch.title, badge: me.badge || patch.badge, selected_banner_key: me.selected_banner_key || patch.selected_banner_key, xp: me.xp ?? patch.xp }).eq('id', session.user.id).catch(()=>{});
+    await sb.from('profiles').update({ title: me.title || patch.title, badge: me.badge || patch.badge, selected_banner_key: me.selected_banner_key || patch.selected_banner_key, xp: me.xp ?? patch.xp }).eq('id', session.user.id).then(undefined, ()=>{});
     me = { ...patch, ...me };
   }
   fillAccountForm();
@@ -449,7 +489,7 @@ async function createTeam(e) {
 }
 window.deleteTeam = async (id) => {
   const local = JSON.parse(localStorage.stackopsTeams || '[]').filter(t => t.id !== id); localStorage.stackopsTeams = JSON.stringify(local);
-  if (sb) await sb.from('teams').delete().eq('id', id).catch(()=>{});
+  if (sb) await sb.from('teams').delete().eq('id', id).then(undefined, ()=>{});
   renderTeams(); updateProfileUI(); toast('Team deleted');
 };
 window.joinTeam = (name) => { switchView('chat'); setChannel('team-room'); toast(`Joined ${name}`); };
@@ -550,11 +590,12 @@ async function startRazorpayCheckout({ name, amount, type='service', plan_key=nu
     }
   }
 
+  const useCheckout = cfg.RAZORPAY_CHECKOUT_ENABLED === true;
+  const paymentLink = cfg.RAZORPAY_PAYMENT_LINK || 'https://razorpay.me/';
   const keyMissing = !window.Razorpay || !cfg.RAZORPAY_KEY_ID || cfg.RAZORPAY_KEY_ID.includes('YOUR_');
-  if (keyMissing) {
-    const link = cfg.RAZORPAY_PAYMENT_LINK || 'https://razorpay.me/';
-    toast('Razorpay key missing. Opening payment link fallback.');
-    window.open(link, '_blank');
+  if (!useCheckout || keyMissing) {
+    toast(useCheckout && keyMissing ? 'Razorpay key missing. Opening secure payment link.' : 'Opening secure Razorpay payment link.');
+    window.open(paymentLink, '_blank');
     return;
   }
 
@@ -590,7 +631,7 @@ async function startRazorpayCheckout({ name, amount, type='service', plan_key=nu
       updateProfileUI();
     },
     modal: { ondismiss: async () => {
-      if (sb && localPaymentId) await sb.from('payments').update({ status:'cancelled' }).eq('id', localPaymentId).catch(()=>{});
+      if (sb && localPaymentId) await sb.from('payments').update({ status:'cancelled' }).eq('id', localPaymentId).then(undefined, ()=>{});
       toast('Payment cancelled');
     }}
   };
@@ -622,8 +663,8 @@ async function watchVerifiedUnlock(paymentId, meta={}) {
     try {
       const { data } = await sb.from('payments').select('status, verified_at, plan_key, item_type').eq('id', paymentId).single();
       if (data && ['captured','verified','unlocked'].includes(data.status)) {
-        await safeLoadMe().catch(()=>{});
-        await awardXP(80, 'Verified payment reward').catch(()=>{});
+        await safeLoadMe().then(undefined, ()=>{});
+        await awardXP(80, 'Verified payment reward').then(undefined, ()=>{});
         toast(meta.type === 'plan' ? 'Premium plan unlocked!' : 'Payment verified!');
         renderPlans();
         updateProfileUI();
@@ -661,7 +702,7 @@ window.equipReward = async (type, name) => {
   const item = (type === 'title' ? demo.titles : demo.badges).find(x => x.name === name);
   if (!item || !isUnlocked(item)) return toast(item?.adminOnly ? 'Founder exclusive' : 'Locked — complete quests to unlock');
   const patch = type === 'title' ? { title:name } : { badge:name };
-  if (sb) await sb.from('profiles').update(patch).eq('id', session.user.id).catch(()=>{});
+  if (sb) await sb.from('profiles').update(patch).eq('id', session.user.id).then(undefined, ()=>{});
   me = { ...me, ...patch }; renderRewards(); updateProfileUI(); toast(`${name} equipped`);
 };
 window.equipBanner = async (key) => {
@@ -669,7 +710,7 @@ window.equipBanner = async (key) => {
   const item = demo.banners.find(x => x.key === key);
   if (!item || !isUnlocked(item)) return toast(item?.adminOnly ? 'Founder banner is admin only' : 'Banner locked — earn XP first');
   localStorage.stackopsBanner = key;
-  if (sb) await sb.from('profiles').update({ selected_banner_key:key }).eq('id', session.user.id).catch(()=>{});
+  if (sb) await sb.from('profiles').update({ selected_banner_key:key }).eq('id', session.user.id).then(undefined, ()=>{});
   me = { ...me, selected_banner_key:key }; renderRewards(); updateProfileUI(); toast('Banner equipped');
 };
 function renderAccountPreview() {
@@ -682,7 +723,7 @@ function renderAccountPreview() {
 async function equipFounderKit() {
   if (!isAdmin()) return toast('Founder only');
   const patch = { title:'Founder', badge:'Origin Crown', selected_banner_key:'gold', is_verified:true, xp:999999 };
-  if (sb && session) await sb.from('profiles').update(patch).eq('id', session.user.id).catch(()=>{});
+  if (sb && session) await sb.from('profiles').update(patch).eq('id', session.user.id).then(undefined, ()=>{});
   me = { ...me, ...patch }; renderRewards(); updateProfileUI(); toast('Founder kit equipped');
 }
 
@@ -703,7 +744,7 @@ window.claimQuest = async (xp, name) => {
   const current = Number(me?.xp || localStorage.stackopsXP || 0);
   const next = current + Number(xp || 0);
   localStorage.stackopsXP = next;
-  if (sb) await sb.from('profiles').update({ xp: next }).eq('id', session.user.id).catch(()=>{});
+  if (sb) await sb.from('profiles').update({ xp: next }).eq('id', session.user.id).then(undefined, ()=>{});
   me = { ...me, xp: next };
   renderRewards(); updateProfileUI(); renderAccountPreview();
   toast(`${name}: +${xp} XP`);
@@ -721,7 +762,7 @@ async function loadMessages() {
   const box = $('#messages'); if (!box) return;
   box.innerHTML = '';
   if (sb) {
-    const { data } = await sb.from('messages').select('*').eq('channel', currentChannel).order('created_at', { ascending:true }).limit(80).catch(()=>({data:null}));
+    const { data } = await sb.from('messages').select('*').eq('channel', currentChannel).order('created_at', { ascending:true }).limit(80).then(undefined, ()=>({data:null}));
     (data || []).forEach(m => appendMessage({ content:m.content, sender_name:m.sender_name || 'Player', channel:m.channel, me:m.sender_id === session?.user?.id }));
   }
   if (!box.children.length) ['Welcome to this room.','Drop rank, role and server.','Keep it clean. StackOps is competitive but respectful.'].forEach((x,i)=>appendMessage({sender_name:['ArenaBot','IGL','Mod'][i], content:x, channel:currentChannel}));
@@ -739,7 +780,7 @@ async function sendMessage() {
   const content = $('#messageInput').value.trim(); if (!content) return;
   $('#messageInput').value = '';
   appendMessage({ sender_name:me?.username || 'me', content, channel:currentChannel, me:true });
-  if (sb) await sb.from('messages').insert({ sender_id:session.user.id, sender_name:me?.username || me?.display_name || 'Player', channel:currentChannel, content }).catch(()=>{});
+  if (sb) await sb.from('messages').insert({ sender_id:session.user.id, sender_name:me?.username || me?.display_name || 'Player', channel:currentChannel, content }).then(undefined, ()=>{});
 }
 function subscribeRealtime() {
   if (!sb) return;
@@ -812,9 +853,9 @@ window.joinVoice = joinVoice;
 async function renderAdmin() {
   if (!isAdmin()) return;
   if (!sb) { $('#adminUsers').innerHTML = '<p>Add Supabase keys to manage real users.</p>'; $('#adminSellers').innerHTML = '<p>Seller approvals appear here.</p>'; return; }
-  const users = (await sb.from('profiles').select('id,username,role,account_status,is_banned,is_verified').limit(30).catch(()=>({data:[]}))).data || [];
+  const users = (await sb.from('profiles').select('id,username,role,account_status,is_banned,is_verified').limit(30).then(undefined, ()=>({data:[]}))).data || [];
   $('#adminUsers').innerHTML = users.map(u => `<div class="user-row"><b>${u.username || u.id.slice(0,8)}</b><small>${u.role} • ${u.account_status || 'approved'} • ${u.is_banned?'banned':'active'}</small><button class="mini" onclick="adminUpdateUser('${u.id}','approved')">Approve</button><button class="mini" onclick="adminBan('${u.id}',${!u.is_banned})">${u.is_banned?'Unban':'Ban'}</button><button class="mini" onclick="adminVerify('${u.id}')">Verify</button></div>`).join('') || 'No users yet';
-  const sellers = (await sb.from('seller_applications').select('*').limit(30).catch(()=>({data:[]}))).data || [];
+  const sellers = (await sb.from('seller_applications').select('*').limit(30).then(undefined, ()=>({data:[]}))).data || [];
   $('#adminSellers').innerHTML = sellers.map(s => `<div class="user-row"><b>${s.user_id?.slice(0,8) || 'seller'}</b><small>${s.status}</small><button class="mini" onclick="adminSeller('${s.id}','approved')">Approve</button><button class="mini" onclick="adminSeller('${s.id}','rejected')">Reject</button></div>`).join('') || 'No seller applications';
 }
 window.adminUpdateUser = async (id,status)=>{ await sb.from('profiles').update({ account_status:status }).eq('id', id); toast('User updated'); renderAdmin(); };
@@ -822,13 +863,13 @@ window.adminBan = async (id,banned)=>{ await sb.from('profiles').update({ is_ban
 window.adminVerify = async (id)=>{ await sb.from('profiles').update({ is_verified:true }).eq('id', id); toast('User verified'); renderAdmin(); };
 window.adminSeller = async (id,status)=>{
   if (!sb) return toast('Supabase not connected');
-  const { data: app } = await sb.from('seller_applications').select('user_id').eq('id', id).maybeSingle().catch(()=>({data:null}));
-  await sb.from('seller_applications').update({ status }).eq('id', id).catch(()=>{});
+  const { data: app } = await sb.from('seller_applications').select('user_id').eq('id', id).maybeSingle().then(undefined, ()=>({data:null}));
+  await sb.from('seller_applications').update({ status }).eq('id', id).then(undefined, ()=>{});
   if (app?.user_id && status === 'approved') {
-    await sb.from('profiles').update({ is_seller:true, seller_status:'approved', is_verified:true }).eq('id', app.user_id).catch(()=>{});
+    await sb.from('profiles').update({ is_seller:true, seller_status:'approved', is_verified:true }).eq('id', app.user_id).then(undefined, ()=>{});
   }
   if (app?.user_id && status === 'rejected') {
-    await sb.from('profiles').update({ is_seller:false, seller_status:'rejected' }).eq('id', app.user_id).catch(()=>{});
+    await sb.from('profiles').update({ is_seller:false, seller_status:'rejected' }).eq('id', app.user_id).then(undefined, ()=>{});
   }
   toast('Seller updated'); renderAdmin();
 };
@@ -878,7 +919,7 @@ async function awardXP(xp, reason='XP earned'){
   if(!session || isAdmin()) { if(isAdmin()) toast('Founder already has all unlocks'); return; }
   const next = Number(me?.xp || localStorage.stackopsXP || 0) + Number(xp || 0);
   localStorage.stackopsXP = next;
-  if(sb) await sb.from('profiles').update({xp:next}).eq('id', session.user.id).catch(()=>{});
+  if(sb) await sb.from('profiles').update({xp:next}).eq('id', session.user.id).then(undefined, ()=>{});
   me = {...me, xp:next};
   renderRewards(); updateProfileUI(); renderAccountPreview(); renderRetention();
   celebrate(); toast(`${reason}: +${xp} XP`);
@@ -934,15 +975,15 @@ async function claimDailyReward(){
   if(localStorage.stackopsLastDaily===today) return toast('Daily reward already claimed');
   const streak=getStreak()+1;
   localStorage.stackopsLastDaily=today; localStorage.stackopsStreak=streak;
-  if(sb) await sb.from('daily_checkins').insert({user_id:session.user.id, checkin_date:today, xp_awarded:80 + (streak*10)}).catch(()=>{});
-  if(sb) await sb.from('profiles').update({daily_streak:streak,last_daily_claim:today}).eq('id',session.user.id).catch(()=>{});
+  if(sb) await sb.from('daily_checkins').insert({user_id:session.user.id, checkin_date:today, xp_awarded:80 + (streak*10)}).then(undefined, ()=>{});
+  if(sb) await sb.from('profiles').update({daily_streak:streak,last_daily_claim:today}).eq('id',session.user.id).then(undefined, ()=>{});
   me={...me,daily_streak:streak,last_daily_claim:today};
   await awardXP(80 + (streak*10), `Daily streak day ${streak}`);
 }
 function copyInvite(){
   if(needLogin()) return;
   const val=$('#inviteLink')?.value || '';
-  navigator.clipboard?.writeText(val).then(()=>toast('Invite link copied')).catch(()=>toast(val));
+  navigator.clipboard?.writeText(val).then(()=>toast('Invite link copied')).then(undefined, ()=>toast(val));
 }
 function processReferral(){
   const ref=new URLSearchParams(location.search).get('ref');
@@ -963,12 +1004,12 @@ loadMe = async function(){
   const patch={};
   if(!me?.referral_code) patch.referral_code=session.user.id.slice(0,8).toLowerCase();
   if(me?.daily_streak==null) patch.daily_streak=0;
-  if(Object.keys(patch).length && sb) await sb.from('profiles').update(patch).eq('id',session.user.id).catch(()=>{});
+  if(Object.keys(patch).length && sb) await sb.from('profiles').update(patch).eq('id',session.user.id).then(undefined, ()=>{});
   me={...me,...patch};
   // Referral capture: simple safe insert; duplicate prevented by SQL unique index.
   const ref=localStorage.stackopsRef;
   if(ref && sb && ref !== patch.referral_code){
-    await sb.from('referrals').insert({referral_code:ref, invited_user_id:session.user.id}).catch(()=>{});
+    await sb.from('referrals').insert({referral_code:ref, invited_user_id:session.user.id}).then(undefined, ()=>{});
     localStorage.removeItem('stackopsRef');
   }
   renderRetention();
@@ -1025,7 +1066,7 @@ document.addEventListener('DOMContentLoaded', init);
     liveEvents.unshift(ev); liveEvents = liveEvents.slice(0, 18);
     localStorage.stackopsLiveEvents = JSON.stringify(liveEvents);
     renderLiveCenter();
-    if(sb) sb.from('live_activity').insert({ user_id: session?.user?.id || null, username: ev.user, type:kind, content:text }).catch(()=>{});
+    if(sb) sb.from('live_activity').insert({ user_id: session?.user?.id || null, username: ev.user, type:kind, content:text }).then(undefined, ()=>{});
   }
   window.addLiveEvent = addLiveEvent;
 
@@ -1052,10 +1093,10 @@ document.addEventListener('DOMContentLoaded', init);
     let sellers = 0;
     if(sb){
       const [p,t,po,s] = await Promise.all([
-        sb.from('profiles').select('id', { count:'exact', head:true }).catch(()=>({count:null})),
-        sb.from('teams').select('id', { count:'exact', head:true }).catch(()=>({count:null})),
-        sb.from('posts').select('id', { count:'exact', head:true }).catch(()=>({count:null})),
-        sb.from('seller_applications').select('id', { count:'exact', head:true }).catch(()=>({count:null}))
+        sb.from('profiles').select('id', { count:'exact', head:true }).then(undefined, ()=>({count:null})),
+        sb.from('teams').select('id', { count:'exact', head:true }).then(undefined, ()=>({count:null})),
+        sb.from('posts').select('id', { count:'exact', head:true }).then(undefined, ()=>({count:null})),
+        sb.from('seller_applications').select('id', { count:'exact', head:true }).then(undefined, ()=>({count:null}))
       ]);
       if(p.count != null) players = Math.max(players, p.count + 2400);
       if(t.count != null) teams = t.count;
@@ -1136,7 +1177,7 @@ document.addEventListener('DOMContentLoaded', init);
   window.deletePost = async function(id){
     const local = JSON.parse(localStorage.stackopsPosts || '[]');
     localStorage.stackopsPosts = JSON.stringify(local.filter(p => p.id !== id));
-    if(sb && !String(id).startsWith('demo-')) await sb.from('posts').delete().eq('id', id).catch(()=>{});
+    if(sb && !String(id).startsWith('demo-')) await sb.from('posts').delete().eq('id', id).then(undefined, ()=>{});
     renderPosts(); addLiveEvent('Deleted a community post', me?.username || 'Player', 'post'); toast('Post deleted');
   };
 
@@ -1187,7 +1228,7 @@ document.addEventListener('DOMContentLoaded', init);
     const id = 'srv-' + Date.now(); const channel = id;
     const server = {id, name, visibility, channel, owner_id:session.user.id};
     const arr = JSON.parse(localStorage.stackopsServers || '[]'); arr.unshift(server); localStorage.stackopsServers = JSON.stringify(arr);
-    if(sb) await sb.from('chat_servers').insert({id, owner_id:session.user.id, name, visibility, invite_code:id}).catch(()=>{});
+    if(sb) await sb.from('chat_servers').insert({id, owner_id:session.user.id, name, visibility, invite_code:id}).then(undefined, ()=>{});
     $('#serverNameInput').value = ''; renderDiscordServers(); selectServer(channel); addLiveEvent(`Created ${visibility} server: ${name}`, me?.username || 'Player', 'server'); toast('Server created');
   }
   const oldSetChannel = setChannel;
@@ -1204,10 +1245,10 @@ document.addEventListener('DOMContentLoaded', init);
     if(grid && !$('#adminMetrics')) grid.insertAdjacentHTML('afterbegin', `<section class="panel" style="grid-column:1/-1"><div class="admin-metrics" id="adminMetrics"><div class="metric"><b id="mUsers">0</b><span>Users</span></div><div class="metric"><b id="mSellers">0</b><span>Seller apps</span></div><div class="metric"><b id="mPosts">0</b><span>Posts</span></div><div class="metric"><b id="mRevenue">₹0</b><span>Tracked revenue</span></div></div><h2>Live Control Feed</h2><div id="adminLiveFeed"></div></section>`);
     if(!sb){ await oldRenderAdmin(); renderAdminFallback(); return; }
     const [users,sellers,posts,payments] = await Promise.all([
-      sb.from('profiles').select('id,username,role,account_status,is_banned,is_verified,created_at').order('created_at',{ascending:false}).limit(30).catch(()=>({data:[]})),
-      sb.from('seller_applications').select('*').order('created_at',{ascending:false}).limit(30).catch(()=>({data:[]})),
-      sb.from('posts').select('id', {count:'exact', head:true}).catch(()=>({count:0})),
-      sb.from('payments').select('amount_inr').catch(()=>({data:[]}))
+      sb.from('profiles').select('id,username,role,account_status,is_banned,is_verified,created_at').order('created_at',{ascending:false}).limit(30).then(undefined, ()=>({data:[]})),
+      sb.from('seller_applications').select('*').order('created_at',{ascending:false}).limit(30).then(undefined, ()=>({data:[]})),
+      sb.from('posts').select('id', {count:'exact', head:true}).then(undefined, ()=>({count:0})),
+      sb.from('payments').select('amount_inr').then(undefined, ()=>({data:[]}))
     ]);
     const userRows = users.data || []; const sellerRows = sellers.data || [];
     $('#mUsers') && ($('#mUsers').textContent = userRows.length);
@@ -1262,7 +1303,7 @@ async function getSellerApplicationsSafe() {
     const { data: profs } = await sb.from('profiles')
       .select('id,username,display_name,role,is_seller,seller_status,is_verified,is_banned,created_at')
       .in('id', ids)
-      .catch(()=>({data:[]}));
+      .then(undefined, ()=>({data:[]}));
     (profs || []).forEach(p => profiles[p.id] = p);
   }
   return { apps, profiles, error:null };
@@ -1338,7 +1379,7 @@ window.approveSellerApplication = async function(id) {
   if (profErr) return toast('Profile update failed: ' + profErr.message);
   const { error: appUpdateErr } = await sb.from('seller_applications').update({status:'approved', reviewed_at:now}).eq('id', id);
   if (appUpdateErr) return toast('Application update failed: ' + appUpdateErr.message);
-  await sb.from('notifications').insert({user_id:app.user_id, type:'seller_approved', content:'Your seller account is approved. You can now offer services on StackOps.'}).catch(()=>{});
+  await sb.from('notifications').insert({user_id:app.user_id, type:'seller_approved', content:'Your seller account is approved. You can now offer services on StackOps.'}).then(undefined, ()=>{});
   addLiveEvent('Seller approved', app.user_id.slice(0,8), 'admin');
   toast('Seller approved');
   renderSellerReview();
@@ -1346,11 +1387,11 @@ window.approveSellerApplication = async function(id) {
 
 window.rejectSellerApplication = async function(id) {
   if (!sb || !isAdmin()) return toast('Admin only');
-  const { data: app } = await sb.from('seller_applications').select('user_id').eq('id', id).maybeSingle().catch(()=>({data:null}));
+  const { data: app } = await sb.from('seller_applications').select('user_id').eq('id', id).maybeSingle().then(undefined, ()=>({data:null}));
   await sb.from('seller_applications').update({status:'rejected', reviewed_at:new Date().toISOString()}).eq('id', id);
   if (app?.user_id) {
-    await sb.from('profiles').update({is_seller:false, seller_status:'rejected'}).eq('id', app.user_id).catch(()=>{});
-    await sb.from('notifications').insert({user_id:app.user_id, type:'seller_rejected', content:'Your seller application was not approved yet. Improve profile details and apply again.'}).catch(()=>{});
+    await sb.from('profiles').update({is_seller:false, seller_status:'rejected'}).eq('id', app.user_id).then(undefined, ()=>{});
+    await sb.from('notifications').insert({user_id:app.user_id, type:'seller_rejected', content:'Your seller application was not approved yet. Improve profile details and apply again.'}).then(undefined, ()=>{});
   }
   toast('Seller rejected');
   renderSellerReview();
@@ -1441,8 +1482,8 @@ document.addEventListener('DOMContentLoaded', () => {
         sb.from('profiles').select('id', {count:'exact', head:true}),
         sb.from('seller_applications').select('id,status', {count:'exact'}),
         sb.from('posts').select('id', {count:'exact', head:true}),
-        sb.from('orders').select('amount_inr,status').limit(500).catch(()=>({data:[]})),
-        sb.from('payments').select('amount_inr,status').limit(500).catch(()=>({data:[]}))
+        sb.from('orders').select('amount_inr,status').limit(500).then(undefined, ()=>({data:[]})),
+        sb.from('payments').select('amount_inr,status').limit(500).then(undefined, ()=>({data:[]}))
       ]);
       const apps = a.data || [];
       const pending = apps.filter(x => (x.status || 'pending') === 'pending').length;
@@ -1470,7 +1511,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ids = [...new Set((apps || []).map(x => x.user_id).filter(Boolean))];
     let profiles = {};
     if(ids.length){
-      const pr = await sb.from('profiles').select('id,username,display_name,riot_id,region,main_game,is_verified,is_seller,seller_status,created_at').in('id', ids).catch(()=>({data:[]}));
+      const pr = await sb.from('profiles').select('id,username,display_name,riot_id,region,main_game,is_verified,is_seller,seller_status,created_at').in('id', ids).then(undefined, ()=>({data:[]}));
       (pr.data || []).forEach(p => profiles[p.id] = p);
     }
     cachedApps = apps || [];
@@ -1538,7 +1579,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(p.error) return toast('Profile update failed: ' + p.error.message);
     const s = await sb.from('seller_applications').update({ status:'approved', reviewed_at:now }).eq('id', id);
     if(s.error) return toast('Application update failed: ' + s.error.message);
-    await sb.from('activity_events').insert({actor_id:session?.user?.id, username:me?.username||'Founder', event_type:'seller_approved', body:'Approved a seller application'}).catch(()=>{});
+    await sb.from('activity_events').insert({actor_id:session?.user?.id, username:me?.username||'Founder', event_type:'seller_approved', body:'Approved a seller application'}).then(undefined, ()=>{});
     toast('Seller approved');
     await renderSellerReview(); await renderAdmin?.();
   };
@@ -1547,10 +1588,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if(!sb || !isAdmin()) return toast('Admin only');
     const app = cachedApps.find(x => x.id === id) || (await sb.from('seller_applications').select('*').eq('id', id).maybeSingle()).data;
     if(!app) return toast('Application not found');
-    await sb.from('profiles').update({ is_seller:false, seller_status:'rejected' }).eq('id', app.user_id).catch(()=>{});
+    await sb.from('profiles').update({ is_seller:false, seller_status:'rejected' }).eq('id', app.user_id).then(undefined, ()=>{});
     const s = await sb.from('seller_applications').update({ status:'rejected', reviewed_at:new Date().toISOString() }).eq('id', id);
     if(s.error) return toast('Reject failed: ' + s.error.message);
-    await sb.from('activity_events').insert({actor_id:session?.user?.id, username:me?.username||'Founder', event_type:'seller_rejected', body:'Rejected a seller application'}).catch(()=>{});
+    await sb.from('activity_events').insert({actor_id:session?.user?.id, username:me?.username||'Founder', event_type:'seller_rejected', body:'Rejected a seller application'}).then(undefined, ()=>{});
     toast('Seller rejected');
     await renderSellerReview(); await renderAdmin?.();
   };
@@ -1575,8 +1616,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if(res.error){ toast('Could not submit seller application: ' + res.error.message); }
     else{
-      await sb.from('profiles').update({ seller_status:'pending' }).eq('id', session.user.id).catch(()=>{});
-      await sb.from('activity_events').insert({actor_id:session.user.id, username:row.applicant_name, event_type:'seller_application', body:'Submitted seller application'}).catch(()=>{});
+      await sb.from('profiles').update({ seller_status:'pending' }).eq('id', session.user.id).then(undefined, ()=>{});
+      await sb.from('activity_events').insert({actor_id:session.user.id, username:row.applicant_name, event_type:'seller_application', body:'Submitted seller application'}).then(undefined, ()=>{});
       localStorage.stackopsSellerApplied = '1'; toast('Seller application submitted');
       await window.stackopsRefreshLive?.();
     }
@@ -1711,8 +1752,8 @@ document.addEventListener('DOMContentLoaded', () => {
         res = await sb.from('seller_applications').insert({user_id: session.user.id, status: 'pending'});
       }
       if(res.error) throw res.error;
-      await sb.from('profiles').update({seller_status:'pending'}).eq('id', session.user.id).catch(()=>{});
-      await sb.from('activity_events').insert({actor_id:session.user.id, username:name, event_type:'seller_application', body:'Submitted seller application'}).catch(()=>{});
+      await sb.from('profiles').update({seller_status:'pending'}).eq('id', session.user.id).then(undefined, ()=>{});
+      await sb.from('activity_events').insert({actor_id:session.user.id, username:name, event_type:'seller_application', body:'Submitted seller application'}).then(undefined, ()=>{});
       localStorage.stackopsSellerApplied = '1';
       toast('Seller application submitted. Admin can approve it from Seller Approval Desk.');
       refreshSellerButton?.();
@@ -1735,7 +1776,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ids = [...new Set((apps || []).map(a => a.user_id).filter(Boolean))];
     const profiles = {};
     if(ids.length){
-      const pr = await sb.from('profiles').select('*').in('id', ids).catch(()=>({data:[]}));
+      const pr = await sb.from('profiles').select('*').in('id', ids).then(undefined, ()=>({data:[]}));
       (pr.data || []).forEach(x => profiles[x.id] = x);
     }
     finalSellerApps = apps || [];
@@ -1804,7 +1845,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(p.error) return toast('Profile update failed: ' + p.error.message);
     const s = await sb.from('seller_applications').update({status:'approved', reviewed_at:now}).eq('id', id);
     if(s.error) return toast('Application update failed: ' + s.error.message);
-    await sb.from('activity_events').insert({actor_id:session?.user?.id, username:me?.username||'Founder', event_type:'seller_approved', body:'Approved a seller application'}).catch(()=>{});
+    await sb.from('activity_events').insert({actor_id:session?.user?.id, username:me?.username||'Founder', event_type:'seller_approved', body:'Approved a seller application'}).then(undefined, ()=>{});
     toast('Seller approved');
     await window.renderSellerReview();
     await renderAdmin?.();
@@ -1814,7 +1855,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(!sb || !isAdmin()) return toast('Admin only');
     const app = finalSellerApps.find(x => x.id === id) || (await sb.from('seller_applications').select('*').eq('id', id).maybeSingle()).data;
     if(!app?.user_id) return toast('Application not found');
-    await sb.from('profiles').update({is_seller:false, seller_status:'rejected'}).eq('id', app.user_id).catch(()=>{});
+    await sb.from('profiles').update({is_seller:false, seller_status:'rejected'}).eq('id', app.user_id).then(undefined, ()=>{});
     const s = await sb.from('seller_applications').update({status:'rejected', reviewed_at:new Date().toISOString()}).eq('id', id);
     if(s.error) return toast('Reject failed: ' + s.error.message);
     toast('Seller rejected');
@@ -1857,7 +1898,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function ensureProfileForUserFinal(user){
     if(!sb || !user) return null;
-    let {data:profile} = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle().catch(()=>({data:null}));
+    let {data:profile} = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle().then(undefined, ()=>({data:null}));
     if(profile){ me = profile; return profile; }
     const fallback = {
       id: user.id,
@@ -1869,8 +1910,8 @@ document.addEventListener('DOMContentLoaded', () => {
       seller_status: 'none',
       is_verified: false
     };
-    await sb.from('profiles').upsert(fallback, {onConflict:'id'}).catch(()=>{});
-    const refetch = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle().catch(()=>({data:fallback}));
+    await sb.from('profiles').upsert(fallback, {onConflict:'id'}).then(undefined, ()=>{});
+    const refetch = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle().then(undefined, ()=>({data:fallback}));
     me = refetch.data || fallback;
     return me;
   }
@@ -1898,7 +1939,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .eq('user_id', user.id)
         .in('status', ['pending','approved'])
         .maybeSingle()
-        .catch(()=>({data:null,error:null}));
+        .then(undefined, ()=>({data:null,error:null}));
       if(existing?.data?.id){
         notify(existing.data.status === 'approved' ? 'Seller account already approved.' : 'Your seller application is already pending.');
         return;
@@ -1913,8 +1954,8 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       const {error} = await sb.from('seller_applications').insert(row);
       if(error) throw error;
-      await sb.from('profiles').update({seller_status:'pending'}).eq('id', user.id).catch(()=>{});
-      await sb.from('activity_events').insert({actor_id:user.id, username:name, event_type:'seller_application', body:'Submitted seller application'}).catch(()=>{});
+      await sb.from('profiles').update({seller_status:'pending'}).eq('id', user.id).then(undefined, ()=>{});
+      await sb.from('activity_events').insert({actor_id:user.id, username:name, event_type:'seller_application', body:'Submitted seller application'}).then(undefined, ()=>{});
       notify('Seller application submitted. Admin can approve it from Seller Approval Desk.');
       try { addLiveEvent('Submitted seller application', name, 'seller'); } catch {}
       try { await window.renderSellerReview?.(); } catch {}
@@ -1950,7 +1991,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadProfilesMapFinal(userIds){
     const map = {};
     if(!sb || !userIds.length) return map;
-    const {data} = await sb.from('profiles').select('*').in('id', userIds).catch(()=>({data:[]}));
+    const {data} = await sb.from('profiles').select('*').in('id', userIds).then(undefined, ()=>({data:[]}));
     (data||[]).forEach(p=>map[p.id]=p);
     return map;
   }
@@ -1959,7 +2000,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const list = $q('#sellerReviewList') || $q('#adminSellers');
     if(list) list.innerHTML = '<div class="empty-state pulse-soft">Loading seller applications...</div>';
     if(!sb){ if(list) list.innerHTML = '<div class="empty-state">Supabase not connected.</div>'; return; }
-    const {data:apps,error} = await sb.from('seller_applications').select('*').order('created_at', {ascending:false}).catch(e=>({data:[], error:e}));
+    const {data:apps,error} = await sb.from('seller_applications').select('*').order('created_at', {ascending:false}).then(undefined, e=>({data:[], error:e}));
     if(error){ if(list) list.innerHTML = `<div class="empty-state">Could not load seller applications: ${esc(error.message)}</div>`; return; }
     const profiles = await loadProfilesMapFinal([...(new Set((apps||[]).map(a=>a.user_id).filter(Boolean)))]);
     const filter = window.sellerDeskFilterFinal || 'pending';
@@ -1991,10 +2032,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.rejectSellerFinal = async function(id){
     try{
-      const {data:app} = await sb.from('seller_applications').select('*').eq('id', id).maybeSingle().catch(()=>({data:null}));
+      const {data:app} = await sb.from('seller_applications').select('*').eq('id', id).maybeSingle().then(undefined, ()=>({data:null}));
       const {error} = await sb.from('seller_applications').update({status:'rejected', reviewed_at:new Date().toISOString()}).eq('id', id);
       if(error) throw error;
-      if(app?.user_id) await sb.from('profiles').update({seller_status:'rejected'}).eq('id', app.user_id).catch(()=>{});
+      if(app?.user_id) await sb.from('profiles').update({seller_status:'rejected'}).eq('id', app.user_id).then(undefined, ()=>{});
       notify('Seller application rejected.');
       await window.renderSellerReview();
     }catch(err){ notify('Could not reject seller: ' + (err?.message || err)); }
