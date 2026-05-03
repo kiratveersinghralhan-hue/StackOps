@@ -465,27 +465,27 @@ async function startRazorpayCheckout({ name, amount, type='service', plan_key=nu
     name: cfg.RAZORPAY_BUSINESS_NAME || 'StackOps',
     description: name,
     image: 'stackops-luxury-logo.webp',
-    notes: { stackops_payment_id: localPaymentId || '', item_type: type, plan_key: plan_key || '' },
+    notes: { stackops_payment_id: localPaymentId || '', stackops_user_id: session.user.id, item_type: type, plan_key: plan_key || '', item_name: name },
     prefill: { email: session.user.email || cfg.RAZORPAY_CONTACT_EMAIL || '' },
     theme: { color: '#ff4655' },
     handler: async (res) => {
-      if (sb) {
+      // IMPORTANT: frontend success is not trusted for premium unlocks.
+      // The Supabase Edge Function webhook verifies Razorpay signature and unlocks automatically.
+      if (sb && localPaymentId) {
         try {
           await sb.from('payments').update({
             provider_payment_id: res.razorpay_payment_id,
-            status: 'paid',
+            provider_order_id: res.razorpay_order_id || null,
+            provider_signature: res.razorpay_signature || null,
+            status: 'client_success',
             raw_response: res
           }).eq('id', localPaymentId);
-          if (type === 'plan' && plan_key) {
-            await sb.from('profiles').update({ plan_key }).eq('id', session.user.id).catch(()=>{});
-            me = { ...me, plan_key };
-          }
         } catch (err) {
-          console.warn('Payment update failed:', err?.message || err);
+          console.warn('Payment client-success update failed:', err?.message || err);
         }
       }
-      toast(`Payment successful: ${money(amount)}`);
-      await awardXP(80, 'Payment completed').catch(()=>{});
+      toast(`Payment received. Verifying unlock...`);
+      await watchVerifiedUnlock(localPaymentId, { type, plan_key, amount });
       refreshPaymentGMV();
       updateProfileUI();
     },
@@ -496,6 +496,31 @@ async function startRazorpayCheckout({ name, amount, type='service', plan_key=nu
   };
 
   new Razorpay(options).open();
+}
+
+
+async function watchVerifiedUnlock(paymentId, meta={}) {
+  if (!sb || !paymentId) {
+    toast('Payment done. Auto-unlock needs Supabase webhook setup.');
+    return;
+  }
+  const maxSeconds = Number(cfg.PAYMENT_VERIFY_POLL_SECONDS || 45);
+  const started = Date.now();
+  while ((Date.now() - started) < maxSeconds * 1000) {
+    try {
+      const { data } = await sb.from('payments').select('status, verified_at, plan_key, item_type').eq('id', paymentId).single();
+      if (data && ['captured','verified','unlocked'].includes(data.status)) {
+        await loadProfile().catch(()=>{});
+        await awardXP(80, 'Verified payment reward').catch(()=>{});
+        toast(meta.type === 'plan' ? 'Premium plan unlocked!' : 'Payment verified!');
+        renderPlans();
+        updateProfileUI();
+        return;
+      }
+    } catch (err) { console.warn('payment verify poll:', err?.message || err); }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  toast('Payment recorded. Unlock will appear after Razorpay webhook verifies it.');
 }
 
 function renderRewards() {

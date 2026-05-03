@@ -1,7 +1,17 @@
 window.STACKOPS_CONFIG = {
   SUPABASE_URL: 'https://ffagzruaerzftqwmnbmp.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmYWd6cnVhZXJ6ZnRxd21uYm1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNTYyMTcsImV4cCI6MjA5MDczMjIxN30.H_bI5O0YLMOjvnyGyi6HIq1scBHydRebB3lx7nJkVzc',
+  // Razorpay: paste your TEST key first, then switch to LIVE key when ready.
+  // Money goes to the bank account linked with this Razorpay account after KYC/settlement.
   RAZORPAY_KEY_ID: 'rzp_live_SkpHJhAcRCNvzO',
+  RAZORPAY_PAYMENT_LINK: 'https://razorpay.me/@RevivoCare',
+  // Supabase Edge Function URL for verified auto-unlocks.
+  // After deploying the webhook function, paste:
+  // https://YOUR_PROJECT_REF.functions.supabase.co/razorpay-webhook
+  RAZORPAY_WEBHOOK_FUNCTION_URL: '',
+  PAYMENT_VERIFY_POLL_SECONDS: 45,
+  RAZORPAY_BUSINESS_NAME: 'StackOps',
+  RAZORPAY_CONTACT_EMAIL: 'kiratveersinghralhan@gmail.com',
   ADMIN_EMAILS: ['kiratveersinghralhan@gmail.com','qq299629@gmail.com'],
   DEFAULT_LANGUAGE: 'en',
   STORAGE_BUCKETS: {

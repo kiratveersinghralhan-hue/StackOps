@@ -61,3 +61,17 @@ Files added:
 - `supabase-edge-function-razorpay-webhook.js` — optional production webhook template
 
 Your money goes to the Razorpay account whose `RAZORPAY_KEY_ID` you paste into `config.js`.
+
+## Production Auto Unlock Payments
+This package includes a production-style Razorpay auto unlock system.
+
+Run SQL:
+`auto-premium-unlock-safe.sql`
+
+Deploy Edge Function:
+`supabase-edge-function-razorpay-webhook.ts`
+
+Read:
+`AUTO_UNLOCK_SETUP.md`
+
+SQL REQUIRED: YES
