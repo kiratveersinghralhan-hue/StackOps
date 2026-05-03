@@ -14,6 +14,10 @@ window.STACKOPS_CONFIG = {
   PAYMENT_VERIFY_POLL_SECONDS: 45,
   RAZORPAY_BUSINESS_NAME: 'StackOps',
   RAZORPAY_CONTACT_EMAIL: 'kiratveersinghralhan@gmail.com',
+
+  // Manual UPI fallback: payments come to YOU first. Admin verifies proof, then seller payout is tracked.
+  MANUAL_UPI_ID: 'yourupi@bank',
+  MANUAL_UPI_QR_URL: '',
   ADMIN_EMAILS: ['kiratveersinghralhan@gmail.com','qq299629@gmail.com'],
   DEFAULT_LANGUAGE: 'en',
   STORAGE_BUCKETS: {

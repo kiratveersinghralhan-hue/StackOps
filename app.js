@@ -2287,3 +2287,243 @@ document.addEventListener('DOMContentLoaded', () => {
     try{ sb?.channel('seller_desk_final_status').on('postgres_changes',{event:'*',schema:'public',table:'seller_applications'},()=>window.renderSellerReview()).subscribe(); }catch{}
   });
 })();
+
+/* ==========================================================
+   STACKOPS MIDDLEMAN MARKETPLACE + MANUAL UPI PAYMENT SYSTEM
+   - Platform receives payment first
+   - Admin approves proof
+   - Seller payout amount tracked after commission
+   ========================================================== */
+(function(){
+  const safe = (v='') => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const upiId = () => (window.STACKOPS_CONFIG?.MANUAL_UPI_ID || 'yourupi@bank');
+  const qrUrl = () => (window.STACKOPS_CONFIG?.MANUAL_UPI_QR_URL || '');
+  let selectedManualOrder = null;
+
+  function platformCommission(amount){
+    amount = Number(amount || 0);
+    if (amount < 500) return 7;
+    if (amount < 1000) return 10;
+    if (amount < 2000) return 15;
+    if (amount < 5000) return 20;
+    return 25;
+  }
+
+  function middlemanCommission(amount){
+    const pct = platformCommission(amount);
+    const commission = Math.round(Number(amount || 0) * pct / 100);
+    return { pct, commission, sellerGets: Number(amount || 0) - commission };
+  }
+
+  function ensureManualPaymentModal(){
+    if (document.querySelector('#manualPaymentModal')) return;
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="manualPaymentModal" class="modal">
+        <div class="modal-card manual-pay-card">
+          <button class="close" type="button" id="closeManualPayment">×</button>
+          <span class="eyebrow">Secure Manual Payment</span>
+          <h2 id="manualPayTitle">Complete Payment</h2>
+          <p class="muted">Pay to StackOps first. Admin verifies proof, then the seller delivers. Platform commission is tracked automatically.</p>
+          <div class="upi-box">
+            <div><small>Amount</small><b id="manualPayAmount">₹0</b></div>
+            <div><small>UPI ID</small><b id="manualUpiId"></b></div>
+          </div>
+          <div id="manualQrWrap" class="manual-qr hidden"><img id="manualQrImg" alt="UPI QR"></div>
+          <button class="btn dark full" id="copyUpiBtn">Copy UPI ID</button>
+          <label class="proof-upload">
+            <span>Upload payment screenshot/proof</span>
+            <input id="paymentProofFile" type="file" accept="image/*,.pdf">
+          </label>
+          <button class="btn primary full" id="submitManualProofBtn">Submit Payment Proof</button>
+          <small class="muted">After approval, your order status changes to approved. If rejected, upload a correct proof again.</small>
+        </div>
+      </div>`);
+    document.querySelector('#closeManualPayment')?.addEventListener('click',()=>document.querySelector('#manualPaymentModal')?.classList.remove('active'));
+    document.querySelector('#copyUpiBtn')?.addEventListener('click',()=>{ navigator.clipboard?.writeText(upiId()); toast('UPI ID copied'); });
+    document.querySelector('#submitManualProofBtn')?.addEventListener('click', submitManualPaymentProof);
+  }
+
+  async function isCurrentUserSeller(){
+    if (!session) return false;
+    if (me?.is_seller || me?.seller_status === 'approved' || isAdmin()) return true;
+    if (!sb) return false;
+    const { data } = await sb.from('profiles').select('is_seller,seller_status').eq('id', session.user.id).maybeSingle().then(undefined,()=>({data:null}));
+    return !!(data?.is_seller || data?.seller_status === 'approved');
+  }
+
+  async function createSellerService(){
+    if (needLogin()) return;
+    if (!(await isCurrentUserSeller())) return toast('Only approved sellers can create services. Apply to sell first.');
+    const title = document.querySelector('#serviceTitle')?.value?.trim();
+    const game = document.querySelector('#serviceGame')?.value?.trim() || 'Valorant';
+    const price = Number(document.querySelector('#servicePrice')?.value || 0);
+    const description = document.querySelector('#serviceDesc')?.value?.trim();
+    if (!title || !description || price < 1) return toast('Enter service title, description and valid price');
+    const row = { seller_id: session.user.id, title, game, description, price_inr: price, status:'active' };
+    if (sb) {
+      const { error } = await sb.from('seller_services').insert(row);
+      if (error) return toast('Could not create service: ' + error.message);
+    } else {
+      const local = JSON.parse(localStorage.stackopsSellerServices || '[]');
+      local.unshift({...row,id:'local-'+Date.now(), seller_name: me?.username || session.user.email});
+      localStorage.stackopsSellerServices = JSON.stringify(local);
+    }
+    ['#serviceTitle','#servicePrice','#serviceDesc'].forEach(id=>{ const el=document.querySelector(id); if(el) el.value=''; });
+    toast('Service listed. Buyers can now submit payment proof.');
+    await renderServices();
+  }
+
+  async function loadSellerServices(){
+    if (sb) {
+      const { data, error } = await sb.from('seller_services')
+        .select('id,seller_id,title,game,description,price_inr,status,created_at')
+        .eq('status','active')
+        .order('created_at',{ascending:false})
+        .limit(50);
+      if (!error && data?.length) return data;
+    }
+    const local = JSON.parse(localStorage.stackopsSellerServices || '[]');
+    if (local.length) return local;
+    return demo.services.map((s,i)=>({id:'demo-'+i,seller_id:null,title:s.title,game:'Valorant',description:s.description,price_inr:s.price_inr,status:'active', demo:true}));
+  }
+
+  async function openManualPayment(service){
+    if (needLogin()) return;
+    ensureManualPaymentModal();
+    selectedManualOrder = service;
+    const { pct, commission, sellerGets } = middlemanCommission(service.price_inr);
+    document.querySelector('#manualPayTitle').textContent = service.title;
+    document.querySelector('#manualPayAmount').textContent = money(service.price_inr);
+    document.querySelector('#manualUpiId').textContent = upiId();
+    const qr = qrUrl();
+    if (qr) { document.querySelector('#manualQrImg').src = qr; document.querySelector('#manualQrWrap').classList.remove('hidden'); }
+    else document.querySelector('#manualQrWrap').classList.add('hidden');
+    const card = document.querySelector('.manual-pay-card .muted');
+    if (card) card.innerHTML = `Pay StackOps first. Commission: <b>${pct}% (${money(commission)})</b>. Seller payout after completion: <b>${money(sellerGets)}</b>.`;
+    document.querySelector('#manualPaymentModal').classList.add('active');
+  }
+
+  async function submitManualPaymentProof(){
+    if (!selectedManualOrder || needLogin()) return;
+    const file = document.querySelector('#paymentProofFile')?.files?.[0];
+    if (!file) return toast('Upload payment screenshot first');
+    const { pct, commission, sellerGets } = middlemanCommission(selectedManualOrder.price_inr);
+    let proofPath = '';
+    if (sb) {
+      const safeName = file.name.replace(/[^a-z0-9_.-]/gi,'-');
+      proofPath = `${session.user.id}/${Date.now()}-${safeName}`;
+      const up = await sb.storage.from('payment-proofs').upload(proofPath, file, { upsert:false });
+      if (up.error) return toast('Proof upload failed: ' + up.error.message);
+      const row = {
+        buyer_id: session.user.id,
+        seller_id: selectedManualOrder.seller_id || null,
+        service_id: String(selectedManualOrder.id || ''),
+        service_title: selectedManualOrder.title,
+        amount_inr: Number(selectedManualOrder.price_inr),
+        commission_percent: pct,
+        commission_inr: commission,
+        seller_payout_inr: sellerGets,
+        proof_path: proofPath,
+        status: 'pending'
+      };
+      const ins = await sb.from('manual_orders').insert(row);
+      if (ins.error) return toast('Payment request failed: ' + ins.error.message);
+    } else {
+      const rows = JSON.parse(localStorage.stackopsManualOrders || '[]');
+      rows.unshift({id:'local-'+Date.now(), service_title:selectedManualOrder.title, amount_inr:selectedManualOrder.price_inr, status:'pending', created_at:new Date().toISOString()});
+      localStorage.stackopsManualOrders = JSON.stringify(rows);
+    }
+    document.querySelector('#manualPaymentModal')?.classList.remove('active');
+    toast('Payment proof submitted. Admin will approve after checking.');
+    selectedManualOrder = null;
+    renderManualOrdersAdmin();
+  }
+
+  window.openManualPaymentForService = async function(id){
+    const services = await loadSellerServices();
+    const svc = services.find(s => String(s.id) === String(id));
+    if (!svc) return toast('Service not found');
+    openManualPayment(svc);
+  };
+
+  const oldRenderServices = window.renderServices || renderServices;
+  renderServices = async function(){
+    renderPlans?.();
+    const list = document.querySelector('#serviceList');
+    if (!list) return;
+    const seller = await isCurrentUserSeller();
+    const services = await loadSellerServices();
+    const sellerBox = seller ? `<section class="panel seller-create-box"><div class="panel-head"><h2>Create Seller Service</h2><span class="chip">Approved seller</span></div><input id="serviceTitle" placeholder="Service title e.g. Valorant Aim Coaching"><input id="serviceGame" placeholder="Game e.g. Valorant"><input id="servicePrice" type="number" placeholder="Price in ₹"><textarea id="serviceDesc" placeholder="What will buyer get?"></textarea><button class="btn primary full" id="createSellerServiceBtn">Publish Service</button></section>` : `<section class="panel"><h2>Want to sell?</h2><p class="muted">Apply as seller, upload proof when asked, then admin approves your account. Payments come to StackOps first and seller payout is tracked after commission.</p></section>`;
+    list.innerHTML = sellerBox + services.map(s => {
+      const calc = middlemanCommission(s.price_inr);
+      return `<article class="service-card"><span class="tag">Admin approved</span><h3>${safe(s.title)}</h3><p>${safe(s.description)}</p><small>${safe(s.game || 'Riot Games')}</small><h2>${money(s.price_inr)}</h2><small>Platform commission: ${calc.pct}% · Seller payout: ${money(calc.sellerGets)}</small><button class="btn primary full" onclick="openManualPaymentForService('${safe(String(s.id))}')">Book / Pay Proof</button></article>`;
+    }).join('');
+    document.querySelector('#createSellerServiceBtn')?.addEventListener('click', createSellerService);
+    refreshPaymentGMV?.();
+    refreshSellerButton?.();
+  };
+
+  async function getProofUrl(path){
+    if (!path || !sb) return '';
+    const { data } = await sb.storage.from('payment-proofs').createSignedUrl(path, 60 * 10).then(undefined,()=>({data:null}));
+    return data?.signedUrl || '';
+  }
+
+  async function renderManualOrdersAdmin(){
+    if (!isAdmin() || !sb) return;
+    let host = document.querySelector('#manualOrdersAdmin');
+    const admin = document.querySelector('#admin .admin-grid');
+    if (!host && admin) {
+      admin.insertAdjacentHTML('beforeend', `<section class="panel manual-admin-panel"><div class="panel-head"><h2>Manual Payment Requests</h2><span class="chip">Middleman escrow</span></div><div id="manualOrdersAdmin" class="admin-list"></div></section>`);
+      host = document.querySelector('#manualOrdersAdmin');
+    }
+    if (!host) return;
+    host.innerHTML = 'Loading payments...';
+    const { data, error } = await sb.from('manual_orders').select('*').order('created_at',{ascending:false}).limit(50);
+    if (error) { host.innerHTML = 'Cannot load payments: ' + safe(error.message); return; }
+    const rows = data || [];
+    host.innerHTML = rows.map(o => `<div class="manual-order-card ${safe(o.status)}"><b>${safe(o.service_title)}</b><small>${money(o.amount_inr)} · ${safe(o.status)} · Commission ${money(o.commission_inr)} · Seller payout ${money(o.seller_payout_inr)}</small><div class="row-actions"><button class="mini" onclick="viewPaymentProof('${safe(o.proof_path || '')}')">View Proof</button><button class="mini success" onclick="approveManualOrder('${o.id}')">Approve</button><button class="mini danger" onclick="rejectManualOrder('${o.id}')">Reject</button><button class="mini" onclick="markSellerPaid('${o.id}')">Mark Seller Paid</button></div></div>`).join('') || 'No manual payment requests yet';
+  }
+
+  window.viewPaymentProof = async function(path){
+    const url = await getProofUrl(path);
+    if (!url) return toast('Proof not available');
+    window.open(url, '_blank');
+  };
+  window.approveManualOrder = async function(id){
+    if (!sb || !isAdmin()) return;
+    const { error } = await sb.from('manual_orders').update({status:'approved', approved_at:new Date().toISOString()}).eq('id',id);
+    if (error) return toast(error.message);
+    toast('Payment approved. Seller can deliver now.'); renderManualOrdersAdmin();
+  };
+  window.rejectManualOrder = async function(id){
+    if (!sb || !isAdmin()) return;
+    const { error } = await sb.from('manual_orders').update({status:'rejected'}).eq('id',id);
+    if (error) return toast(error.message);
+    toast('Payment rejected'); renderManualOrdersAdmin();
+  };
+  window.markSellerPaid = async function(id){
+    if (!sb || !isAdmin()) return;
+    const { error } = await sb.from('manual_orders').update({payout_status:'paid', payout_paid_at:new Date().toISOString()}).eq('id',id);
+    if (error) return toast(error.message);
+    toast('Seller payout marked paid'); renderManualOrdersAdmin();
+  };
+
+  const oldRenderAdmin = window.renderAdmin || renderAdmin;
+  renderAdmin = async function(){
+    await oldRenderAdmin?.();
+    await renderManualOrdersAdmin();
+  };
+
+  const oldSwitch = window.switchView || switchView;
+  switchView = function(id){
+    oldSwitch(id);
+    if (id === 'market') setTimeout(()=>renderServices(), 100);
+    if (id === 'admin') setTimeout(()=>renderManualOrdersAdmin(), 300);
+  };
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    ensureManualPaymentModal();
+    setTimeout(()=>{ renderServices(); renderManualOrdersAdmin(); }, 1200);
+  });
+})();
