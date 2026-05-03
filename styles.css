@@ -146,3 +146,10 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;bac
 @media(max-width:760px){.seller-dash-grid{grid-template-columns:1fr}.wallet-kpis{grid-template-columns:1fr}.seller-row{grid-template-columns:1fr}.seller-row .actions{justify-content:flex-start}}
 /* Final deploy safety fixes */
 .modal.show,.modal.active{display:grid!important}.boot.hide{opacity:0!important;pointer-events:none!important}.empty-state{border:1px dashed var(--line);border-radius:18px;padding:18px;color:var(--muted);background:rgba(255,255,255,.035)}.seller-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;border:1px solid var(--line);border-radius:16px;padding:13px;background:rgba(255,255,255,.04);margin:8px 0}.user-row{display:flex;justify-content:space-between;align-items:center;gap:12px}.danger{border-color:rgba(255,70,85,.45)!important;color:#ffb3ba!important}.card-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}.compact-plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.payment-modal-card img{max-width:210px;width:100%;border-radius:16px;background:#fff;padding:8px}.upi-copy-row,.payment-amount-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0;background:rgba(255,255,255,.04)}
+
+/* Final no-error payment polish */
+.payment-order-card { align-items: flex-start; gap: 14px; }
+.proof-box { margin-top: 10px; }
+.proof-thumb { width: 120px; max-height: 180px; object-fit: cover; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); display: block; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+.payment-modal-card input[type="file"] { padding: 14px; background: rgba(255,255,255,.04); border-radius: 14px; }

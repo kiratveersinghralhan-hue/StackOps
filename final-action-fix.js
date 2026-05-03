@@ -252,27 +252,79 @@
   };
   window.orderSellerService = function(id,title,price,sellerId){ openManualPayment({ item_type:'service', item_name:title, amount_inr:Number(price||0), service_id:id, seller_id:sellerId }); };
 
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error('Could not read file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function submitManualPayment() {
     if (needLogin()) return;
     const c = getClient();
-    const utr = $('#manualPayUTR')?.value?.trim();
-    const file = $('#manualPayProof')?.files?.[0];
-    if (!utr) return toast('Enter UTR / Reference number.');
-    if (!file) return toast('Upload payment screenshot with reference number clearly visible.');
-    const amount = Number(payment?.amount_inr || payment?.amount || 0);
-    const filePath = `${user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9_.-]/g,'_')}`;
-    const up = await c.storage.from('payment-proofs').upload(filePath, file, { upsert:false });
-    if (up.error) return toast('Proof upload failed: ' + up.error.message);
-    const com = commission(amount);
-    const row = {
-      buyer_id:user.id, seller_id:payment?.seller_id || null, service_id:payment?.service_id || null,
-      item_type:payment?.item_type || 'plan', item_name:payment?.item_name || payment?.name || 'StackOps purchase', plan_key:payment?.plan_key || null,
-      amount_inr:amount, commission_inr:com, seller_earning_inr:Math.max(0, amount-com), utr, proof_url:filePath, status:'pending', is_feedback_public:!!$('#manualPayPublicFeedback')?.checked
-    };
-    const { error } = await c.from('manual_orders').insert(row);
-    if (error) return toast('Payment submit failed: ' + error.message);
-    closeModal('manualPaymentModal');
-    toast('Payment submitted. It will reflect in your account within 24–48 hours after verification.');
+    if (!c) return toast('Supabase is not connected.');
+
+    const btn = $('#submitManualPayment');
+    const oldText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+
+    try {
+      const utr = $('#manualPayUTR')?.value?.trim();
+      const file = $('#manualPayProof')?.files?.[0];
+      if (!utr) return toast('Enter UTR / Reference number.');
+      if (!file) return toast('Upload payment screenshot with reference number clearly visible.');
+
+      const amount = Number(payment?.amount_inr || payment?.amount || 0);
+      if (!amount || amount < 1) return toast('Payment amount missing. Please reopen the plan/service payment.');
+
+      const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+      const filePath = `${user.id}/${Date.now()}_${safeName}`;
+      let proof_url = filePath;
+      let proof_data = null;
+
+      // First try Supabase Storage. If it is blocked, fallback to DB proof_data so submit still works.
+      const up = await c.storage.from('payment-proofs').upload(filePath, file, { upsert: true, contentType: file.type || 'image/png' });
+      if (up.error) {
+        console.warn('Storage upload blocked, using proof_data fallback:', up.error.message);
+        try { proof_data = await readFileAsDataURL(file); } catch (_) { proof_data = null; }
+        proof_url = null;
+      }
+
+      const com = commission(amount);
+      const row = {
+        buyer_id: user.id,
+        seller_id: payment?.seller_id || null,
+        service_id: payment?.service_id || null,
+        item_type: payment?.item_type || 'plan',
+        item_name: payment?.item_name || payment?.name || 'StackOps purchase',
+        plan_key: payment?.plan_key || null,
+        amount_inr: amount,
+        commission_inr: com,
+        seller_earning_inr: Math.max(0, amount - com),
+        utr,
+        proof_url,
+        proof_data,
+        proof_file_name: safeName,
+        status: 'pending',
+        is_feedback_public: !!$('#manualPayPublicFeedback')?.checked
+      };
+
+      const { error } = await c.from('manual_orders').insert(row);
+      if (error) {
+        console.error('manual_orders insert error', error);
+        return toast('Payment submit failed: ' + error.message + '. Run FINAL_PAYMENT_NO_ERRORS_SQL.sql once.');
+      }
+
+      closeModal('manualPaymentModal');
+      if ($('#manualPayUTR')) $('#manualPayUTR').value = '';
+      if ($('#manualPayProof')) $('#manualPayProof').value = '';
+      toast('Payment submitted. It will reflect in your account within 24–48 hours after verification.');
+      switchView('account');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = oldText || 'Submit Payment Proof'; }
+    }
   }
 
   async function createService() {
@@ -315,13 +367,46 @@
   window.rejectSeller = async function(id){ const c=getClient(); await c.from('seller_applications').update({status:'rejected', reviewed_at:new Date().toISOString()}).eq('id',id); toast('Seller rejected'); loadSellerApplications(); };
   window.unapproveSeller = async function(id){ const c=getClient(); const {data:a}=await c.from('seller_applications').select('*').eq('id',id).maybeSingle(); if(a) await c.from('profiles').update({is_seller:false, seller_status:'none'}).eq('id',a.user_id); await c.from('seller_applications').update({status:'pending'}).eq('id',id); toast('Seller moved to pending'); loadSellerApplications(); };
 
+  function orderProofHTML(o) {
+    if (o.proof_data) return `<img class="proof-thumb" src="${o.proof_data}" alt="Payment proof">`;
+    if (o.proof_url) {
+      let url = '#';
+      try { url = getClient().storage.from('payment-proofs').getPublicUrl(o.proof_url).data.publicUrl; } catch (_) {}
+      return `<a class="mini" href="${url}" target="_blank" rel="noopener">Open Proof</a>`;
+    }
+    return '<small>No proof uploaded</small>';
+  }
+
   async function loadManualOrders() {
     const c = getClient(); const el = $('#adminManualOrders'); if (!c || !el || !isAdmin()) return;
+    el.innerHTML = '<div class="empty-state">Loading payment orders...</div>';
     const { data, error } = await c.from('manual_orders').select('*').order('created_at',{ascending:false}).limit(80);
-    if (error) { el.innerHTML = '<div class="empty-state">Orders blocked: '+esc(error.message)+'</div>'; return; }
-    el.innerHTML = (data || []).map(o => `<div class="user-row"><div><b>${esc(o.item_name || o.item_type)}</b><small>${money(o.amount_inr)} · ${esc(o.status)} · UTR ${esc(o.utr||'')}</small></div><div>${o.status !== 'approved' ? `<button class="mini" onclick="adminOrderStatus('${o.id}','approved')">Approve</button>` : ''}${o.status !== 'rejected' ? `<button class="mini danger" onclick="adminOrderStatus('${o.id}','rejected')">Reject</button>` : ''}</div></div>`).join('') || '<div class="empty-state">No manual orders yet.</div>';
+    if (error) { el.innerHTML = '<div class="empty-state">Orders blocked: '+esc(error.message)+'<br><small>Run FINAL_PAYMENT_NO_ERRORS_SQL.sql once.</small></div>'; return; }
+    el.innerHTML = (data || []).map(o => `
+      <div class="user-row payment-order-card">
+        <div>
+          <b>${esc(o.item_name || o.item_type || 'Manual order')}</b>
+          <small>${money(o.amount_inr)} · ${esc(o.status || 'pending')} · UTR ${esc(o.utr||'')}</small>
+          <small>Commission ${money(o.commission_inr)} · Seller payout ${money(o.seller_earning_inr)}</small>
+          <div class="proof-box">${orderProofHTML(o)}</div>
+        </div>
+        <div>
+          ${o.status !== 'approved' ? `<button class="mini" onclick="adminOrderStatus('${o.id}','approved')">Approve</button>` : `<button class="mini danger" onclick="adminOrderStatus('${o.id}','pending')">Unapprove</button>`}
+          ${o.status !== 'rejected' ? `<button class="mini danger" onclick="adminOrderStatus('${o.id}','rejected')">Reject</button>` : ''}
+        </div>
+      </div>`).join('') || '<div class="empty-state">No manual orders yet.</div>';
   }
-  window.adminOrderStatus = async function(id,status){ const c=getClient(); const {error}=await c.from('manual_orders').update({status, approved_at:status==='approved'?new Date().toISOString():null, rejected_at:status==='rejected'?new Date().toISOString():null}).eq('id',id); if(error)return toast(error.message); toast('Order '+status); loadManualOrders(); };
+  window.adminOrderStatus = async function(id,status){
+    const c=getClient();
+    const { data: order } = await c.from('manual_orders').select('*').eq('id',id).maybeSingle();
+    const {error}=await c.from('manual_orders').update({status, approved_at:status==='approved'?new Date().toISOString():null, rejected_at:status==='rejected'?new Date().toISOString():null}).eq('id',id);
+    if(error)return toast(error.message);
+    if (status === 'approved' && order?.buyer_id && order?.plan_key) {
+      await c.from('profiles').update({ plan_key: order.plan_key, is_verified: true }).eq('id', order.buyer_id);
+    }
+    toast('Order '+status);
+    loadManualOrders();
+  };
   async function loadPayouts() { /* safe placeholder */ }
 
   async function sendMessage() {
