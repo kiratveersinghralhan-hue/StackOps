@@ -124,6 +124,52 @@ async function init() {
   renderAllSafe();
 }
 
+
+async function applySeller() {
+  if (needLogin()) return;
+  const alreadySeller = me?.is_seller === true || me?.seller_status === 'approved' || localStorage.stackopsSellerApproved === '1';
+  if (alreadySeller) {
+    toast('Seller account already active');
+    switchView('market');
+    return;
+  }
+  const btn = $('#applySellerBtn');
+  const oldText = btn?.textContent || 'Apply to Sell';
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+
+  let submitted = false;
+  if (sb && session) {
+    try {
+      // Do not fail the user if a duplicate request already exists.
+      const { error } = await sb.from('seller_applications').insert({
+        user_id: session.user.id,
+        status: 'pending',
+        note: 'Seller application submitted from StackOps marketplace'
+      });
+      if (!error) submitted = true;
+      else console.warn('seller_applications insert:', error.message);
+    } catch (err) {
+      console.warn('Seller application failed:', err?.message || err);
+    }
+  }
+
+  localStorage.stackopsSellerApplied = '1';
+  toast(submitted ? 'Seller application submitted for admin approval' : 'Seller application saved locally. Admin can approve after DB sync.');
+  refreshSellerButton();
+  renderAdmin();
+  if (btn) { btn.disabled = false; btn.textContent = oldText; }
+}
+
+function refreshSellerButton() {
+  const btn = $('#applySellerBtn');
+  if (!btn) return;
+  const approved = me?.is_seller === true || me?.seller_status === 'approved' || localStorage.stackopsSellerApproved === '1';
+  const pending = localStorage.stackopsSellerApplied === '1' || me?.seller_status === 'pending';
+  if (approved) { btn.textContent = 'Seller Active'; btn.classList.remove('primary'); btn.classList.add('dark'); }
+  else if (pending) { btn.textContent = 'Application Pending'; btn.classList.remove('primary'); btn.classList.add('dark'); }
+  else { btn.textContent = 'Apply to Sell'; btn.classList.add('primary'); btn.classList.remove('dark'); }
+}
+
 function wireUI() {
   $('#saveLanguage').onclick = () => { localStorage.stackopsLang = $('#languageSelect').value; $('#languageModal').classList.remove('active'); };
   $('#hamb').onclick = () => $('#mobileMenu').classList.toggle('open');
@@ -320,6 +366,7 @@ function updateProfileUI() {
   $('#badgeCounter').textContent = admin ? 6 : 2;
   $('#levelFill').style.width = admin ? '100%' : '46%';
   renderAccountPreview();
+  refreshSellerButton();
 }
 
 async function uploadFile(bucket, file, folder='uploads') {
@@ -361,12 +408,44 @@ function teamCard(t) {
   return `<article class="team-card"><span class="tag">${t.game}</span><h3>${t.name}</h3><p>${t.description || ''}</p><small>${t.region || 'Global'} • ${t.rank || 'Any rank'}</small><div class="actions"><button class="btn primary full" onclick="joinTeam('${t.name.replace(/'/g,"\\'")}')">Join Lobby</button>${canDelete ? `<button class="btn dark full" onclick="deleteTeam('${t.id}')">Delete Team</button>` : ''}</div></article>`;
 }
 async function createTeam(e) {
-  e.preventDefault();
+  if (e?.preventDefault) e.preventDefault();
   if (needLogin()) return;
-  const team = { id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name: $('#teamName').value.trim(), game: $('#teamGame').value, region: $('#teamRegion').value.trim(), rank: $('#teamRank').value.trim(), description: $('#teamDescription').value.trim(), owner_id: session.user.id, local:true };
-  if (sb) await sb.from('teams').insert({ owner_id: session.user.id, name: team.name, game: team.game, region: team.region, rank_required: team.rank, description: team.description }).catch(()=>{});
-  const local = JSON.parse(localStorage.stackopsTeams || '[]'); local.unshift(team); localStorage.stackopsTeams = JSON.stringify(local);
-  $('#teamModal').classList.remove('active'); $('#teamForm').reset(); renderTeams(); updateProfileUI(); toast('Team created');
+  const name = $('#teamName')?.value?.trim();
+  if (!name) return toast('Enter a team name');
+  const team = {
+    id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    name,
+    game: $('#teamGame')?.value || 'Valorant',
+    region: $('#teamRegion')?.value?.trim() || 'Global',
+    rank: $('#teamRank')?.value?.trim() || 'Any rank',
+    description: $('#teamDescription')?.value?.trim() || 'Looking for teammates',
+    owner_id: session.user.id,
+    local:true,
+    created_at:new Date().toISOString()
+  };
+
+  // Always show immediately, even if Supabase table/RLS has a problem.
+  const local = JSON.parse(localStorage.stackopsTeams || '[]');
+  local.unshift(team);
+  localStorage.stackopsTeams = JSON.stringify(local);
+
+  if (sb) {
+    try {
+      const { error } = await sb.from('teams').insert({
+        id: team.id,
+        owner_id: session.user.id,
+        name: team.name,
+        game: team.game,
+        region: team.region,
+        rank_required: team.rank,
+        description: team.description
+      });
+      if (error) console.warn('Team sync failed:', error.message);
+    } catch (err) { console.warn('Team sync failed:', err?.message || err); }
+  }
+  $('#teamModal')?.classList.remove('active');
+  $('#teamForm')?.reset();
+  renderTeams(); updateProfileUI(); if (typeof refreshTrueCounters === 'function') refreshTrueCounters(); toast('Team created');
 }
 window.deleteTeam = async (id) => {
   const local = JSON.parse(localStorage.stackopsTeams || '[]').filter(t => t.id !== id); localStorage.stackopsTeams = JSON.stringify(local);
@@ -383,19 +462,40 @@ function renderPosts() {
 }
 async function createPost() {
   if (needLogin()) return;
-  const content = $('#postContent').value.trim();
+  const content = $('#postContent')?.value?.trim();
   if (!content) return toast('Write something first');
-  const imageUrl = await uploadFile(cfg.STORAGE_BUCKETS?.posts || 'posts', $('#postImage').files[0], 'post');
-  const post = { id:String(Date.now()), username:me?.username || 'player', content, image_url:imageUrl, created_at:new Date().toISOString(), user_id:session.user.id };
-  if (sb) await sb.from('posts').insert({ user_id: session.user.id, content, image_url: imageUrl }).catch(()=>{});
-  const local = JSON.parse(localStorage.stackopsPosts || '[]'); local.unshift(post); localStorage.stackopsPosts = JSON.stringify(local);
-  $('#postContent').value=''; $('#postImage').value=''; renderPosts(); toast('Post published');
+  const imageUrl = await uploadFile(cfg.STORAGE_BUCKETS?.posts || 'posts', $('#postImage')?.files?.[0], 'post');
+  const post = {
+    id:(crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    username:me?.username || me?.display_name || 'player',
+    content,
+    image_url:imageUrl,
+    created_at:new Date().toISOString(),
+    user_id:session.user.id,
+    local:true
+  };
+
+  // Always show immediately, even if Supabase table/RLS has a problem.
+  const local = JSON.parse(localStorage.stackopsPosts || '[]');
+  local.unshift(post);
+  localStorage.stackopsPosts = JSON.stringify(local);
+
+  if (sb) {
+    try {
+      const { error } = await sb.from('posts').insert({ id: post.id, user_id: session.user.id, content, image_url: imageUrl });
+      if (error) console.warn('Post sync failed:', error.message);
+    } catch (err) { console.warn('Post sync failed:', err?.message || err); }
+  }
+  if ($('#postContent')) $('#postContent').value='';
+  if ($('#postImage')) $('#postImage').value='';
+  renderPosts(); if (typeof refreshTrueCounters === 'function') refreshTrueCounters(); toast('Post published');
 }
 
 function renderServices() {
   renderPlans();
   $('#serviceList').innerHTML = demo.services.map(s => `<article class="service-card"><span class="tag">Admin approved</span><h3>${s.title}</h3><p>${s.description}</p><h2>${money(s.price_inr)}</h2><small>Platform commission: ${money(commission(s.price_inr))}</small><button class="btn primary full" onclick="buy('${s.title.replace(/'/g,"\\'")}',${s.price_inr},'service')">Book Now</button></article>`).join('');
   refreshPaymentGMV();
+  refreshSellerButton();
 }
 
 function renderPlans() {
@@ -495,7 +595,19 @@ async function startRazorpayCheckout({ name, amount, type='service', plan_key=nu
     }}
   };
 
-  new Razorpay(options).open();
+  try {
+    const rzp = new Razorpay(options);
+    rzp.on('payment.failed', function(resp){
+      console.warn('Razorpay failed:', resp?.error);
+      toast(resp?.error?.description || 'Payment failed. Opening payment link fallback.');
+      if (cfg.RAZORPAY_PAYMENT_LINK) window.open(cfg.RAZORPAY_PAYMENT_LINK, '_blank');
+    });
+    rzp.open();
+  } catch (err) {
+    console.warn('Razorpay open failed:', err?.message || err);
+    toast('Checkout could not open. Opening payment link.');
+    if (cfg.RAZORPAY_PAYMENT_LINK) window.open(cfg.RAZORPAY_PAYMENT_LINK, '_blank');
+  }
 }
 
 
@@ -510,7 +622,7 @@ async function watchVerifiedUnlock(paymentId, meta={}) {
     try {
       const { data } = await sb.from('payments').select('status, verified_at, plan_key, item_type').eq('id', paymentId).single();
       if (data && ['captured','verified','unlocked'].includes(data.status)) {
-        await loadProfile().catch(()=>{});
+        await safeLoadMe().catch(()=>{});
         await awardXP(80, 'Verified payment reward').catch(()=>{});
         toast(meta.type === 'plan' ? 'Premium plan unlocked!' : 'Payment verified!');
         renderPlans();
@@ -708,7 +820,18 @@ async function renderAdmin() {
 window.adminUpdateUser = async (id,status)=>{ await sb.from('profiles').update({ account_status:status }).eq('id', id); toast('User updated'); renderAdmin(); };
 window.adminBan = async (id,banned)=>{ await sb.from('profiles').update({ is_banned:banned, account_status:banned?'banned':'approved' }).eq('id', id); toast('Ban status updated'); renderAdmin(); };
 window.adminVerify = async (id)=>{ await sb.from('profiles').update({ is_verified:true }).eq('id', id); toast('User verified'); renderAdmin(); };
-window.adminSeller = async (id,status)=>{ await sb.from('seller_applications').update({ status }).eq('id', id); toast('Seller updated'); renderAdmin(); };
+window.adminSeller = async (id,status)=>{
+  if (!sb) return toast('Supabase not connected');
+  const { data: app } = await sb.from('seller_applications').select('user_id').eq('id', id).maybeSingle().catch(()=>({data:null}));
+  await sb.from('seller_applications').update({ status }).eq('id', id).catch(()=>{});
+  if (app?.user_id && status === 'approved') {
+    await sb.from('profiles').update({ is_seller:true, seller_status:'approved', is_verified:true }).eq('id', app.user_id).catch(()=>{});
+  }
+  if (app?.user_id && status === 'rejected') {
+    await sb.from('profiles').update({ is_seller:false, seller_status:'rejected' }).eq('id', app.user_id).catch(()=>{});
+  }
+  toast('Seller updated'); renderAdmin();
+};
 
 function initSmoothReveal() {
   const reveal = () => $$('.panel,.profile-card,.team-card,.post-card,.service-card,.reward-card,.banner-card').forEach((el,i)=>{
@@ -1025,12 +1148,15 @@ document.addEventListener('DOMContentLoaded', init);
     if(after > before) addLiveEvent('Published a community post', me?.username || me?.display_name || 'Player', 'post');
   };
 
-  const oldApplySeller = applySeller;
+  const baseApplySeller = applySeller;
   applySeller = async function(){
     if(needLogin()) return;
-    if(isAdmin()){ switchView('admin'); toast('Founder accounts approve sellers here. Use a normal account to test seller application.'); return; }
-    localStorage.stackopsSellerApplied = '1';
-    await oldApplySeller();
+    if(isAdmin()){
+      switchView('admin');
+      toast('Founder account already has seller/admin access. Normal users can apply here.');
+      return;
+    }
+    await baseApplySeller();
     addLiveEvent('Submitted seller application', me?.username || 'Player', 'seller');
   };
 
