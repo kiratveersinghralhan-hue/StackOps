@@ -4,6 +4,11 @@ window.STACKOPS_CONFIG = {
   RAZORPAY_KEY_ID: 'rzp_test_YOUR_KEY_ID',
   ADMIN_EMAILS: ['kiratveersinghralhan@gmail.com','qq299629@gmail.com'],
   DEFAULT_LANGUAGE: 'en',
+  STORAGE_BUCKETS: {
+    avatars: 'avatars',
+    banners: 'banners',
+    posts: 'posts'
+  },
   COMMISSION_RULES: [
     { min: 0, max: 499, percent: 7 },
     { min: 500, max: 999, percent: 10 },
@@ -13,5 +18,6 @@ window.STACKOPS_CONFIG = {
     { min: 5000, max: 9999999, percent: 30 }
   ]
 };
+
 
 

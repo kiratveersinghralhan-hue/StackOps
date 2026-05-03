@@ -1,23 +1,235 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>StackOps Arena</title><meta name="description" content="StackOps: Riot-style gamer social lobby, squads, chat, marketplace and creator services."/><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet"><link rel="stylesheet" href="styles.css"/><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://checkout.razorpay.com/v1/checkout.js"></script><script defer src="config.js"></script><script defer src="app.js"></script></head><body>
-<div id="boot" class="boot"><div class="boot-logo"><span>STACK</span><b>OPS</b></div><div class="boot-line"><i></i></div><p>Syncing arena systems...</p></div>
-<div id="langModal" class="modal on"><div class="modal-card lang-card"><div class="modal-kicker">Global Arena</div><h2>Choose your language</h2><p>Pick a language. You can change it later from settings.</p><select id="languageSelect"><option value="en">English</option><option value="hi">हिन्दी</option><option value="pa">ਪੰਜਾਬੀ</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option><option value="ar">العربية</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="zh">中文</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="id">Bahasa Indonesia</option></select><button class="btn primary full" id="saveLanguage">Enter StackOps</button></div></div>
-<header class="topbar"><button class="brand nav" data-view="lobby"><span class="brand-mark">S</span><span><b>StackOps</b><small>Riot Social Arena</small></span></button><nav class="desktop-nav"><button class="nav active" data-view="lobby">Lobby</button><button class="nav" data-view="squads">Squads</button><button class="nav" data-view="feed">Feed</button><button class="nav" data-view="market">Marketplace</button><button class="nav" data-view="account">My Account</button><button class="nav" data-view="teams">Teams</button><button class="nav" data-view="community">Community</button><button class="nav" data-view="chat">Chat</button><button class="nav" data-view="voice">Voice</button><button class="nav" data-view="plans">Plans</button><button class="nav admin-only hidden" data-view="admin">Admin</button></nav><div class="top-actions"><button id="themeToggle" class="icon-btn" title="Theme">◐</button><button class="btn ghost" id="openAuth">Login</button><button class="btn primary nav" data-view="market">Start Earning</button><button class="hamb" id="hamb">☰</button></div></header>
-<aside class="mobile-menu" id="mobileMenu"><button class="nav active" data-view="lobby">Lobby</button><button class="nav" data-view="squads">Squads</button><button class="nav" data-view="feed">Feed</button><button class="nav" data-view="market">Marketplace</button><button class="nav" data-view="account">My Account</button><button class="nav" data-view="teams">Teams</button><button class="nav" data-view="community">Community</button><button class="nav" data-view="chat">Chat</button><button class="nav" data-view="voice">Voice</button><button class="nav" data-view="plans">Plans</button><button class="nav admin-only hidden" data-view="admin">Admin</button></aside>
-<main>
-<section id="lobby" class="view active"><div class="hero"><div class="hero-bg"><span></span><span></span><span></span></div><div class="hero-left"><div class="live-pill"><b></b><span id="liveStatus">2,418 players online</span></div><h1>Enter the <em>StackOps</em> lobby.</h1><p class="lead">A Riot-style social arena for squads, creators, coaching, chat, premium badges and real gamer identity.</p><div class="hero-actions"><button class="btn mega primary nav" data-view="squads">Find Squad</button><button class="btn mega glass nav" data-view="market">Start Earning</button><button class="btn mega dark nav" data-view="feed">Explore Feed</button></div><div class="ticker"><span>● VCT scrim room live</span><span>● 31 new squads</span><span>● 8 coaches online</span><span>● Founder crown active</span></div></div><div class="agent-card"><div class="rank-strip">LIVE PROFILE CARD</div><div class="agent-top"><div class="avatar">OP</div><div><h3 id="profileName">Guest Player</h3><p id="profileTitle">Rookie • Login to claim identity</p></div><span class="crown hidden" id="crown">👑</span></div><div class="stat-grid"><div><b id="xpCount">0</b><span>XP</span></div><div><b id="squadCount">128</b><span>Squads</span></div><div><b id="coachCount">42</b><span>Coaches</span></div></div><div class="profile-banner"><small>Selected banner</small><strong id="profileBanner">Default Arena Card</strong></div><button class="btn full primary nav" data-view="account" id="claimProfile">Claim / Edit Profile</button></div></div><div class="lobby-grid"><section class="panel hot"><div class="panel-head"><h2>Hot Lobbies</h2><button class="mini nav" data-view="squads">View all</button></div><div id="hotSquads" class="cards-row"></div></section><section class="panel missions"><div class="panel-head"><h2>Daily Missions</h2><span class="tag">XP Loop</span></div><div id="missions"></div></section><section class="panel feed-mini"><div class="panel-head"><h2>Live Arena Feed</h2><span class="pulse-dot"></span></div><div id="liveFeed"></div></section></div></section>
-<section id="squads" class="view"><div class="page-head"><span>Squad Terminal</span><h1>Find teammates fast.</h1><button class="btn primary" id="createSquadBtn">Create Squad</button></div><div class="filters"><input id="squadSearch" placeholder="Search game, rank, region..."><select id="gameFilter"><option>All Riot Games</option><option>Valorant</option><option>League of Legends</option><option>Teamfight Tactics</option><option>Wild Rift</option><option>Legends of Runeterra</option></select><button class="btn dark" id="instantMatch">Instant Match</button></div><div class="grid cards" id="squadList"></div></section>
-<section id="feed" class="view"><div class="page-head"><span>Social Feed</span><h1>Post clips, wins, LFT calls.</h1></div><div class="composer"><textarea id="postText" placeholder="Drop a highlight, LFT note, or clutch story..."></textarea><button class="btn primary" id="postBtn">Post</button></div><div id="postList" class="feed-list"></div></section>
-<section id="market" class="view"><div class="page-head"><span>Creator Marketplace</span><h1>Sell coaching. Buy skill.</h1><button class="btn primary" id="applySeller">Apply to Sell</button></div><div class="market-stats"><div><b id="earnCounter">₹0</b><span>platform GMV demo</span></div><div><b>7%-30%</b><span>commission engine</span></div><div><b>Admin</b><span>seller approval</span></div></div><div class="grid cards" id="serviceList"></div></section>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>StackOps — Gamer Social Arena</title>
+  <meta name="description" content="StackOps is a Riot-style gamer social arena for squads, teams, community posts, chat, coaching, badges, rewards, and collectible profile identity." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script defer src="config.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div id="boot" class="boot">
+    <div class="boot-card">
+      <div class="sigil">S</div>
+      <h1>STACKOPS</h1>
+      <p>Loading arena systems</p>
+      <div class="loader"><i></i></div>
+    </div>
+  </div>
 
-<section id="account" class="view"><div class="page-head"><span>Personal Command Center</span><h1>My Account & Identity.</h1></div><div class="account-grid"><section class="panel profile-editor"><h2>Profile Setup</h2><div class="avatar-edit"><div class="avatar big" id="accountAvatar">OP</div><div><label>Profile picture</label><input type="file" id="avatarFile" accept="image/*"><button class="mini" id="uploadAvatarBtn">Upload avatar</button></div></div><label>Display name</label><input id="editDisplayName" placeholder="Your gamer name"><label>Username</label><input id="editUsername" placeholder="unique_username"><label>Gender</label><select id="editGender"><option value="">Prefer not to say</option><option>Male</option><option>Female</option><option>Non-binary</option><option>Other</option></select><label>Riot ID</label><input id="editRiotId" placeholder="Name#TAG"><label>Main game</label><select id="editMainGame"><option>Valorant</option><option>League of Legends</option><option>Teamfight Tactics</option><option>Wild Rift</option><option>Legends of Runeterra</option></select><label>Region</label><input id="editRegion" placeholder="India / EU / SEA / NA"><label>Bio</label><textarea id="editBio" placeholder="Tell players your role, rank, vibe..."></textarea><button class="btn primary full" id="saveProfileBtn">Save Profile</button></section><section class="panel banner-collection"><h2>Banner Collection</h2><p class="muted">Unlock Valorant-style profile cards through levels, plans and admin rewards.</p><input type="file" id="bannerFile" accept="image/*"><button class="mini" id="uploadBannerBtn">Upload custom banner</button><div id="bannerCollection" class="banner-list"></div></section></div></section>
-<section id="teams" class="view"><div class="page-head"><span>Team Control</span><h1>Create, manage and delete your teams.</h1><button class="btn primary" id="newTeamBtn">Create Team</button></div><div class="team-builder panel"><div class="form-grid"><input id="teamName" placeholder="Team name"><select id="teamGame"><option>Valorant</option><option>League of Legends</option><option>Teamfight Tactics</option><option>Wild Rift</option></select><input id="teamRegion" placeholder="Region"><input id="teamRank" placeholder="Rank requirement"><textarea id="teamDesc" placeholder="Team description, roles needed, schedule..."></textarea></div><button class="btn primary" id="saveTeamBtn">Save Team</button></div><div id="myTeams" class="grid cards"></div></section>
-<section id="community" class="view"><div class="page-head"><span>Community Hub</span><h1>Posts, clips, reactions and creator updates.</h1></div><div class="community-layout"><section class="panel composer pro"><textarea id="communityPostText" placeholder="Post to the community: clip, LFT, tournament, coaching update..."></textarea><input type="file" id="postImageFile" accept="image/*"><div class="split"><button class="btn primary" id="communityPostBtn">Publish Post</button><button class="btn dark" data-view="feed">Open Feed</button></div></section><aside class="panel"><h2>Trending Tags</h2><div class="tag-cloud"><span>#valorant</span><span>#premier</span><span>#coaching</span><span>#duelist</span><span>#riotgames</span></div></aside></div><div id="communityPosts" class="feed-list"></div></section>
-<section id="voice" class="view"><div class="page-head"><span>Voice Rooms</span><h1>Party voice layout for squads.</h1><button class="btn primary" id="createVoiceRoom">Create Voice Room</button></div><div class="voice-grid"><section class="panel voice-stage"><h2 id="voiceRoomName">No room joined</h2><p class="muted">Browser voice UI is ready. For real production audio, connect LiveKit / Agora / WebRTC signaling.</p><div class="voice-users" id="voiceUsers"></div><div class="voice-controls"><button class="btn primary" id="joinVoice">Join Voice</button><button class="btn dark" id="muteVoice">Mute</button><button class="btn dark" id="leaveVoice">Leave</button></div></section><section class="panel"><h2>Available Rooms</h2><div id="voiceRooms"></div></section></div></section>
+  <div id="languageModal" class="modal active">
+    <div class="modal-card compact">
+      <span class="eyebrow">Worldwide Lobby</span>
+      <h2>Choose language</h2>
+      <p>StackOps opens in guest mode. Login later to unlock chat, account, teams and rewards.</p>
+      <select id="languageSelect">
+        <option value="en">English</option><option value="hi">हिन्दी</option><option value="pa">ਪੰਜਾਬੀ</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="ar">العربية</option><option value="pt">Português</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="zh">中文</option><option value="ru">Русский</option><option value="tr">Türkçe</option><option value="id">Bahasa Indonesia</option>
+      </select>
+      <button class="btn primary full" id="saveLanguage">Enter Arena</button>
+    </div>
+  </div>
 
-<section id="chat" class="view"><div class="chat-shell"><aside class="channels"><h3>Channels</h3><button class="channel" data-channel="dm">Direct DM</button><input id="dmEmail" class="dm-input" placeholder="DM email / username"><button class="mini" id="openDmBtn">Open DM</button><button class="channel active" data-channel="global"># global</button><button class="channel" data-channel="valorant"># valorant</button><button class="channel" data-channel="lol"># league</button><button class="channel" data-channel="market"># marketplace</button></aside><section class="chat-main"><div class="chat-head"><h2 id="channelTitle"># global</h2><span>Realtime ready</span></div><div id="messages" class="messages"></div><div class="chat-input"><input id="messageInput" placeholder="Send a message..."><button class="btn primary" id="sendMsg">Send</button></div></section></div></section>
-<section id="plans" class="view"><div class="page-head"><span>Premium Identity</span><h1>Plans that feel like rank upgrades.</h1></div><div id="plansGrid" class="grid plans"></div></section>
-<section id="admin" class="view"><div class="page-head"><span>Founder Console 👑</span><h1>Control the arena.</h1></div><div class="admin-grid"><div class="panel"><h2>Users</h2><div id="adminUsers"></div></div><div class="panel"><h2>Seller approvals</h2><div id="adminServices"></div></div><div class="panel"><h2>Revenue</h2><div class="big-money">₹<span id="adminRevenue">0</span></div><p>Demo dashboard connected to payments table when configured.</p></div></div></section>
-</main>
-<div id="authModal" class="modal"><div class="modal-card"><button class="x" id="closeAuth">×</button><div class="modal-kicker">StackOps Account</div><h2>Login / Signup</h2><input id="email" placeholder="email@example.com"><input id="password" type="password" placeholder="password"><div class="split"><button class="btn primary" id="loginBtn">Login</button><button class="btn dark" id="signupBtn">Signup</button></div><small>Guest mode is allowed. Login unlocks profile, posts, chat, marketplace and admin.</small></div></div>
-<button id="scrollTopBtn" class="scroll-top" title="Scroll to top">↑</button><div id="toast"></div>
-</body></html>
+  <header class="topbar">
+    <button class="brand nav active" data-view="lobby" aria-label="StackOps Home">
+      <span class="brand-logo">S</span>
+      <span><b>StackOps</b><small>Riot Social Arena</small></span>
+    </button>
+    <nav class="desktop-nav" aria-label="Main navigation">
+      <button class="nav active" data-view="lobby">Lobby</button>
+      <button class="nav" data-view="account">My Account</button>
+      <button class="nav" data-view="teams">Teams</button>
+      <button class="nav" data-view="community">Community</button>
+      <button class="nav" data-view="chat">Chat</button>
+      <button class="nav" data-view="market">Marketplace</button>
+      <button class="nav" data-view="rewards">Rewards</button>
+      <button class="nav admin-only hidden" data-view="admin">Admin</button>
+    </nav>
+    <div class="top-actions">
+      <button class="icon-btn" id="themeToggle" aria-label="Toggle theme">◐</button>
+      <button class="btn ghost" id="openAuth">Login</button>
+      <button class="btn primary nav hide-sm" data-view="market">Start Earning</button>
+      <button class="hamb" id="hamb" aria-label="Open menu">☰</button>
+    </div>
+  </header>
+
+  <aside class="mobile-menu" id="mobileMenu">
+    <button class="nav active" data-view="lobby">Lobby</button>
+    <button class="nav" data-view="account">My Account</button>
+    <button class="nav" data-view="teams">Teams</button>
+    <button class="nav" data-view="community">Community</button>
+    <button class="nav" data-view="chat">Chat</button>
+    <button class="nav" data-view="market">Marketplace</button>
+    <button class="nav" data-view="rewards">Rewards</button>
+    <button class="nav admin-only hidden" data-view="admin">Admin</button>
+  </aside>
+
+  <main>
+    <section id="lobby" class="view active">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <div class="live-pill"><i></i><span id="onlineCounter">2,429 players online</span></div>
+          <h1>Enter the <span>StackOps</span> arena.</h1>
+          <p>A clean Riot-style gamer lobby for squads, teams, community posts, DMs, group chat, coaching, titles, banners and founder-level identity.</p>
+          <div class="hero-actions">
+            <button class="btn primary big nav" data-view="teams">Find Squad</button>
+            <button class="btn dark big nav" data-view="community">Explore Posts</button>
+            <button class="btn outline big nav" data-view="market">Start Earning</button>
+          </div>
+          <div class="status-tape"><span>VCT room live</span><span>31 squads</span><span>8 coaches</span><span>Founder banner active</span></div>
+        </div>
+        <article class="profile-card founder-frame" id="profilePreview">
+          <div class="founder-ribbon hidden" id="founderRibbon">Founder</div>
+          <div class="profile-banner-preview" id="heroBannerPreview"><span>Selected Banner</span><b id="heroBannerName">Default Arena Card</b></div>
+          <div class="profile-row">
+            <div class="avatar xl" id="heroAvatar">OP</div>
+            <div>
+              <h2 id="heroName">Guest Player</h2>
+              <p id="heroTitle">Rookie • Login to claim identity</p>
+            </div>
+            <span class="crown hidden" id="heroCrown">👑</span>
+          </div>
+          <div class="stat-grid">
+            <div><b id="xpCounter">0</b><small>XP</small></div>
+            <div><b id="teamCounter">0</b><small>Teams</small></div>
+            <div><b id="badgeCounter">0</b><small>Badges</small></div>
+          </div>
+          <div class="level-bar"><i id="levelFill"></i></div>
+          <button class="btn primary full nav" data-view="account">Customize Identity</button>
+        </article>
+      </div>
+
+      <div class="dash-grid">
+        <section class="panel span-2">
+          <div class="panel-head"><h2>Hot Lobbies</h2><button class="mini nav" data-view="teams">View teams</button></div>
+          <div id="hotTeams" class="card-row"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Daily Quests</h2><span class="chip">XP</span></div>
+          <div id="questList" class="quest-list"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Live Community</h2><span class="pulse"></span></div>
+          <div id="miniFeed" class="mini-feed"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="account" class="view">
+      <div class="page-head"><span>My Account</span><h1>Build your gamer identity.</h1><p>Edit your personal profile, upload avatar/banner, choose titles and equip collectibles.</p></div>
+      <div class="account-grid">
+        <form class="panel account-form" id="profileForm">
+          <h2>Profile Settings</h2>
+          <label>Display name<input id="displayName" placeholder="Your display name" /></label>
+          <label>Username<input id="username" placeholder="unique_username" /></label>
+          <label>Riot ID<input id="riotId" placeholder="Name#TAG" /></label>
+          <label>Gender<select id="gender"><option value="">Prefer not to say</option><option>Male</option><option>Female</option><option>Non-binary</option><option>Other</option></select></label>
+          <label>Main game<select id="mainGame"><option>Valorant</option><option>League of Legends</option><option>Teamfight Tactics</option><option>Wild Rift</option><option>Legends of Runeterra</option><option>All Riot Games</option></select></label>
+          <label>Bio<textarea id="bio" placeholder="Tell squads who you are..."></textarea></label>
+          <div class="two"><label>Avatar<input id="avatarFile" type="file" accept="image/*" /></label><label>Post/Banner image<input id="bannerFile" type="file" accept="image/*" /></label></div>
+          <button class="btn primary full" id="saveProfile" type="submit">Save Profile</button>
+        </form>
+        <aside class="panel collection-panel">
+          <h2>Equipped Identity</h2>
+          <div class="profile-card small" id="accountPreview"></div>
+          <h3>Banner Collection</h3>
+          <div id="bannerCollection" class="collection-grid"></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="teams" class="view">
+      <div class="page-head"><span>Team Builder</span><h1>Create, join and delete teams.</h1><button class="btn primary" id="newTeamBtn">Create Team</button></div>
+      <div class="filters"><input id="teamSearch" placeholder="Search game, rank, region..."><select id="teamGameFilter"><option>All Riot Games</option><option>Valorant</option><option>League of Legends</option><option>Teamfight TFT</option><option>Wild Rift</option></select><button class="btn dark" id="quickMatchBtn">Quick Match</button></div>
+      <div id="teamList" class="grid cards"></div>
+    </section>
+
+    <section id="community" class="view">
+      <div class="page-head"><span>Community</span><h1>Posts, clips, LFT and wins.</h1></div>
+      <div class="composer panel"><textarea id="postContent" placeholder="Share a clutch, LFT note, service update, tournament post..."></textarea><div class="composer-actions"><input id="postImage" type="file" accept="image/*"><button class="btn primary" id="createPostBtn">Publish Post</button></div></div>
+      <div id="postList" class="feed-list"></div>
+    </section>
+
+    <section id="chat" class="view">
+      <div class="page-head"><span>Comms</span><h1>Direct chat, group rooms and voice UI.</h1></div>
+      <div class="chat-layout">
+        <aside class="chat-sidebar panel">
+          <h3>Groups</h3>
+          <button class="channel active" data-channel="global"># global</button>
+          <button class="channel" data-channel="valorant"># valorant</button>
+          <button class="channel" data-channel="marketplace"># marketplace</button>
+          <button class="channel" data-channel="team-room"># team-room</button>
+          <h3>Direct</h3>
+          <button class="channel" data-channel="dm-founder">@ Founder</button>
+          <button class="channel" data-channel="dm-coach">@ Coach</button>
+        </aside>
+        <section class="chat-main panel">
+          <div class="chat-head"><div><h2 id="chatTitle"># global</h2><small>Realtime messages when Supabase table is enabled</small></div><button class="btn voice" id="voiceBtn">🎙️ Join Voice</button></div>
+          <div id="voiceRoom" class="voice-room hidden"><span>Voice room UI</span><b id="voiceStatus">Muted preview</b><div><button class="mini" id="muteBtn">Mute</button><button class="mini" id="leaveVoiceBtn">Leave</button></div></div>
+          <div id="messages" class="messages"></div>
+          <div class="chat-input"><input id="messageInput" placeholder="Message this room..."><button class="btn primary" id="sendMsgBtn">Send</button></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="market" class="view">
+      <div class="page-head"><span>Marketplace</span><h1>Admin-approved sellers only.</h1><button class="btn primary" id="applySellerBtn">Apply to Sell</button></div>
+      <div class="market-stats"><div><b id="gmvCounter">₹0</b><span>demo GMV</span></div><div><b>7%-30%</b><span>commission ladder</span></div><div><b>AI + Admin</b><span>verification flow</span></div></div>
+      <div id="serviceList" class="grid cards"></div>
+    </section>
+
+    <section id="rewards" class="view">
+      <div class="page-head"><span>Rewards</span><h1>Collect titles, badges and banners.</h1><p>Inspired by competitive identity systems: earn XP, unlock titles, equip banners and show status.</p></div>
+      <div class="reward-layout">
+        <section class="panel"><div class="panel-head"><h2>Titles</h2><span class="chip">Equip one</span></div><div id="titleCollection" class="reward-grid"></div></section>
+        <section class="panel"><div class="panel-head"><h2>Badges</h2><span class="chip">Collect</span></div><div id="badgeCollection" class="reward-grid"></div></section>
+        <section class="panel"><div class="panel-head"><h2>Banners</h2><span class="chip">Profile cards</span></div><div id="rewardBannerCollection" class="banner-wide-list"></div></section>
+      </div>
+    </section>
+
+    <section id="admin" class="view">
+      <div class="page-head founder-head"><span>Founder Console 👑</span><h1>Founder control room.</h1><p>Private tools for approving sellers, banning users, verifying profiles and monitoring revenue.</p></div>
+      <div class="admin-grid">
+        <section class="panel"><h2>Users</h2><div id="adminUsers" class="admin-list"></div></section>
+        <section class="panel"><h2>Seller Applications</h2><div id="adminSellers" class="admin-list"></div></section>
+        <section class="panel founder-box"><h2>Founder Identity</h2><p>Title: <b>Founder</b></p><p>Banner: <b>Founder Crownline</b></p><p>Badge: <b>Origin Crown</b></p><button class="btn primary full" id="equipFounder">Equip Founder Kit</button></section>
+      </div>
+    </section>
+  </main>
+
+  <button id="scrollTop" class="scroll-top" aria-label="Scroll to top">↑</button>
+
+  <div id="authModal" class="modal">
+    <div class="modal-card">
+      <button class="close" id="closeAuth">×</button>
+      <span class="eyebrow">StackOps Account</span>
+      <h2>Login / Signup</h2>
+      <input id="email" type="email" placeholder="email@example.com">
+      <input id="password" type="password" placeholder="password">
+      <div class="two"><button class="btn primary" id="loginBtn">Login</button><button class="btn dark" id="signupBtn">Signup</button></div>
+      <small>Guest view is enabled. Login unlocks profile, teams, posts, chat, rewards and admin tools.</small>
+    </div>
+  </div>
+
+  <div id="teamModal" class="modal">
+    <form class="modal-card" id="teamForm">
+      <button class="close" type="button" data-close="teamModal">×</button>
+      <span class="eyebrow">Team Builder</span><h2>Create Team</h2>
+      <input id="teamName" required placeholder="Team name">
+      <select id="teamGame"><option>Valorant</option><option>League of Legends</option><option>Teamfight Tactics</option><option>Wild Rift</option><option>Legends of Runeterra</option></select>
+      <input id="teamRegion" placeholder="Region / server">
+      <input id="teamRank" placeholder="Rank required">
+      <textarea id="teamDescription" placeholder="What kind of players do you need?"></textarea>
+      <button class="btn primary full" type="submit">Create Team</button>
+    </form>
+  </div>
+
+  <div id="toast"></div>
+</body>
+</html>
