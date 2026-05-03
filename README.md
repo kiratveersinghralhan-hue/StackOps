@@ -1,0 +1,77 @@
+# StackOps Live Ready Final
+
+A Riot/Valorant-style gamer social lobby with guest view, login/signup, account customization, teams, community posts, realtime chat UI, voice room UI, marketplace, rewards, badges, titles, banners, and founder/admin controls.
+
+## SQL REQUIRED: YES
+Run `live-ready-final-migration.sql` once in Supabase SQL Editor.
+
+This migration is safe to run multiple times and does not delete your data.
+
+## Admin Emails
+Founder/admin access is controlled by email:
+- kiratveersinghralhan@gmail.com
+- qq299629@gmail.com
+
+Admins automatically unlock:
+- Founder title
+- Origin Crown badge
+- Founder Crownline banner
+- Admin console
+- Crown identity UI
+
+Regular users start with:
+- Rookie title
+- Starter Spark badge
+- Starter Arena Card banner
+
+Founder/admin rewards are locked for everyone else.
+
+## Razorpay
+Edit `config.js`:
+```js
+RAZORPAY_KEY_ID: 'rzp_test_YOUR_KEY_ID'
+```
+Use test mode first. Switch to `rzp_live_...` only when ready.
+
+For real production money, add server-side payment verification later.
+
+## Files
+- `index.html` — main app
+- `styles.css` — responsive UI + animations
+- `app.js` — frontend logic
+- `config.js` — Supabase/Razorpay/admin config
+- `live-ready-final-migration.sql` — backend migration
+- `GO-LIVE-CHECKLIST.md` — launch steps
+
+## Deploy
+Upload the full folder to any static host.
+
+
+## Retention Final Upgrade
+
+SQL REQUIRED: YES — run `retention-final-safe.sql` once in Supabase. It is safe to run multiple times and does not delete data.
+
+Added: invite rewards, daily streaks, leaderboard, next-unlock panel, social proof feed, XP triggers, safer login state refresh, and smoother interactions.
+
+## Razorpay full system added
+
+Files added:
+- `razorpay-full-safe.sql` — safe payment table/policy migration
+- `RAZORPAY_LIVE_SETUP.md` — exact setup steps
+- `supabase-edge-function-razorpay-webhook.js` — optional production webhook template
+
+Your money goes to the Razorpay account whose `RAZORPAY_KEY_ID` you paste into `config.js`.
+
+## Production Auto Unlock Payments
+This package includes a production-style Razorpay auto unlock system.
+
+Run SQL:
+`auto-premium-unlock-safe.sql`
+
+Deploy Edge Function:
+`supabase-edge-function-razorpay-webhook.ts`
+
+Read:
+`AUTO_UNLOCK_SETUP.md`
+
+SQL REQUIRED: YES
