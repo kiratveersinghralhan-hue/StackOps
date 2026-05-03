@@ -1238,3 +1238,181 @@ document.addEventListener('DOMContentLoaded', init);
   renderAll = function(){ oldRenderAll2(); renderLiveCenter(); renderDiscordServers(); renderVoiceRooms(); refreshTrueCounters(); };
   document.addEventListener('DOMContentLoaded', () => { setTimeout(()=>{ renderLiveCenter(); renderDiscordServers(); renderChallengeTracker(); renderVoicePage(); refreshTrueCounters(); setInterval(refreshTrueCounters, 12000); }, 900); });
 })();
+
+/* === StackOps Seller Approval Desk Patch v2 === */
+let sellerDeskFilter = 'pending';
+
+function sellerStatusBadge(status='pending') {
+  const s = String(status || 'pending').toLowerCase();
+  return `<span class="chip seller-status ${s}">${escapeHtml(s)}</span>`;
+}
+
+async function getSellerApplicationsSafe() {
+  if (!sb || !session) return { apps: [], profiles: {}, error: 'Supabase not connected' };
+  const q = sb.from('seller_applications')
+    .select('id,user_id,status,note,applicant_email,applicant_name,created_at,reviewed_at')
+    .order('created_at', { ascending:false })
+    .limit(80);
+  const { data, error } = await q;
+  if (error) return { apps: [], profiles: {}, error: error.message };
+  const apps = data || [];
+  const ids = [...new Set(apps.map(a=>a.user_id).filter(Boolean))];
+  let profiles = {};
+  if (ids.length) {
+    const { data: profs } = await sb.from('profiles')
+      .select('id,username,display_name,role,is_seller,seller_status,is_verified,is_banned,created_at')
+      .in('id', ids)
+      .catch(()=>({data:[]}));
+    (profs || []).forEach(p => profiles[p.id] = p);
+  }
+  return { apps, profiles, error:null };
+}
+
+function sellerReviewCard(app, profile={}) {
+  const status = String(app.status || 'pending').toLowerCase();
+  const name = profile.display_name || profile.username || app.applicant_name || app.applicant_email || (app.user_id || 'seller').slice(0,8);
+  const avatar = initials(name);
+  const created = app.created_at ? new Date(app.created_at).toLocaleString() : 'just now';
+  const sellerFlag = profile.is_seller ? 'Seller enabled' : 'Not seller yet';
+  const ban = profile.is_banned ? 'Banned' : 'Active';
+  return `<article class="seller-review-card ${status}">
+    <div class="seller-review-top">
+      <div class="seller-person"><div class="avatar">${escapeHtml(avatar)}</div><div><h3>${escapeHtml(name)}</h3><small>${escapeHtml(app.applicant_email || profile.username || app.user_id || 'No email saved')}</small></div></div>
+      ${sellerStatusBadge(status)}
+    </div>
+    <div class="seller-meta">
+      <span><b>User:</b> ${escapeHtml((app.user_id || '').slice(0,12))}</span>
+      <span><b>Applied:</b> ${escapeHtml(created)}</span>
+      <span><b>Profile:</b> ${escapeHtml(sellerFlag)} · ${escapeHtml(ban)}</span>
+      <span><b>Verified:</b> ${profile.is_verified ? 'Yes' : 'No'}</span>
+    </div>
+    <p class="muted">${escapeHtml(app.note || 'Wants to sell coaching/services on StackOps.')}</p>
+    <div class="seller-actions">
+      <button class="btn success" onclick="approveSellerApplication('${app.id}')">Approve Seller</button>
+      <button class="btn danger" onclick="rejectSellerApplication('${app.id}')">Reject</button>
+      <button class="btn dark" onclick="copySellerUserId('${app.user_id || ''}')">Copy User ID</button>
+    </div>
+  </article>`;
+}
+
+async function renderSellerReview() {
+  if (!isAdmin()) return toast('Admin only');
+  const list = $('#sellerReviewList');
+  if (!list) return;
+  list.innerHTML = '<div class="empty-state">Loading seller applications...</div>';
+  const { apps, profiles, error } = await getSellerApplicationsSafe();
+  if (error) {
+    list.innerHTML = `<div class="empty-state"><b>Cannot load applications</b><br>${escapeHtml(error)}<br><small>Run seller-approval-desk-safe.sql once, then refresh.</small></div>`;
+    $('#sellerDeskStatus') && ($('#sellerDeskStatus').textContent = 'Policy check');
+    return;
+  }
+  const pending = apps.filter(a => (a.status || 'pending') === 'pending').length;
+  const approved = apps.filter(a => a.status === 'approved').length;
+  const rejected = apps.filter(a => a.status === 'rejected').length;
+  $('#sellerPendingCount') && ($('#sellerPendingCount').textContent = pending);
+  $('#sellerApprovedCount') && ($('#sellerApprovedCount').textContent = approved);
+  $('#sellerRejectedCount') && ($('#sellerRejectedCount').textContent = rejected);
+  $('#sellerDeskStatus') && ($('#sellerDeskStatus').textContent = `${apps.length} total`);
+  let rows = apps;
+  if (sellerDeskFilter !== 'all') rows = rows.filter(a => String(a.status || 'pending') === sellerDeskFilter);
+  list.innerHTML = rows.map(a => sellerReviewCard(a, profiles[a.user_id] || {})).join('') || '<div class="empty-state">No applications in this filter.</div>';
+
+  const adminSellers = $('#adminSellers');
+  if (adminSellers) {
+    adminSellers.innerHTML = apps.slice(0,5).map(a => sellerReviewCard(a, profiles[a.user_id] || {})).join('') || 'No seller applications';
+  }
+  const mSellers = $('#mSellers'); if (mSellers) mSellers.textContent = pending;
+}
+
+window.approveSellerApplication = async function(id) {
+  if (!sb || !isAdmin()) return toast('Admin only');
+  const { data: app, error: appErr } = await sb.from('seller_applications').select('user_id').eq('id', id).maybeSingle();
+  if (appErr || !app) return toast(appErr?.message || 'Application not found');
+  const now = new Date().toISOString();
+  const { error: profErr } = await sb.from('profiles').update({
+    is_seller:true,
+    seller_status:'approved',
+    is_verified:true,
+    account_status:'approved'
+  }).eq('id', app.user_id);
+  if (profErr) return toast('Profile update failed: ' + profErr.message);
+  const { error: appUpdateErr } = await sb.from('seller_applications').update({status:'approved', reviewed_at:now}).eq('id', id);
+  if (appUpdateErr) return toast('Application update failed: ' + appUpdateErr.message);
+  await sb.from('notifications').insert({user_id:app.user_id, type:'seller_approved', content:'Your seller account is approved. You can now offer services on StackOps.'}).catch(()=>{});
+  addLiveEvent('Seller approved', app.user_id.slice(0,8), 'admin');
+  toast('Seller approved');
+  renderSellerReview();
+};
+
+window.rejectSellerApplication = async function(id) {
+  if (!sb || !isAdmin()) return toast('Admin only');
+  const { data: app } = await sb.from('seller_applications').select('user_id').eq('id', id).maybeSingle().catch(()=>({data:null}));
+  await sb.from('seller_applications').update({status:'rejected', reviewed_at:new Date().toISOString()}).eq('id', id);
+  if (app?.user_id) {
+    await sb.from('profiles').update({is_seller:false, seller_status:'rejected'}).eq('id', app.user_id).catch(()=>{});
+    await sb.from('notifications').insert({user_id:app.user_id, type:'seller_rejected', content:'Your seller application was not approved yet. Improve profile details and apply again.'}).catch(()=>{});
+  }
+  toast('Seller rejected');
+  renderSellerReview();
+};
+
+window.copySellerUserId = function(id){ navigator.clipboard?.writeText(id); toast('User ID copied'); };
+
+// Patch seller application to save enough info for admin cards and avoid Razorpay for seller approval.
+applySeller = async function(){
+  if (needLogin()) return;
+  if (me?.is_seller || me?.seller_status === 'approved') { toast('Seller account already active'); switchView('market'); return; }
+  const btn = $('#applySellerBtn'); const old = btn?.textContent || 'Apply to Sell';
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+  let ok = false; let msg = '';
+  if (sb && session) {
+    const row = {
+      user_id: session.user.id,
+      status: 'pending',
+      note: 'Seller application submitted from StackOps marketplace',
+      applicant_email: session.user.email || '',
+      applicant_name: me?.display_name || me?.username || (session.user.email || '').split('@')[0]
+    };
+    let res = await sb.from('seller_applications').insert(row);
+    if (res.error && String(res.error.message).includes('applicant_')) {
+      res = await sb.from('seller_applications').insert({user_id:row.user_id,status:'pending',note:row.note});
+    }
+    ok = !res.error; msg = res.error?.message || '';
+  }
+  if (ok) {
+    localStorage.stackopsSellerApplied = '1';
+    toast('Application submitted. Admin will review it.');
+    addLiveEvent('Submitted seller application', me?.username || 'Player', 'seller');
+  } else {
+    toast('Could not submit seller application. ' + (msg || 'Check SQL/policies.'));
+  }
+  if (btn) { btn.disabled = false; btn.textContent = old; }
+  refreshSellerButton();
+};
+
+// Upgrade navigation hooks for the new page and filter buttons.
+const __stackopsOldSwitchView = switchView;
+switchView = function(id){
+  __stackopsOldSwitchView(id);
+  if (id === 'sellerReview') renderSellerReview();
+};
+
+document.addEventListener('click', (e)=>{
+  const filter = e.target.closest('[data-seller-filter]');
+  if (filter) {
+    sellerDeskFilter = filter.dataset.sellerFilter;
+    document.querySelectorAll('[data-seller-filter]').forEach(b=>b.classList.toggle('active', b === filter));
+    renderSellerReview();
+  }
+  if (e.target.closest('#refreshSellerDesk')) renderSellerReview();
+});
+
+// Make admin dashboard link users to the dedicated seller desk.
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(()=>{
+    const adminPanel = document.querySelector('#admin .page-head');
+    if (adminPanel && !document.querySelector('#openSellerDeskBtn')) {
+      adminPanel.insertAdjacentHTML('beforeend','<button id="openSellerDeskBtn" class="btn primary nav" data-view="sellerReview">Open Seller Approval Desk</button>');
+    }
+  }, 800);
+});

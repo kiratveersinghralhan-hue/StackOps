@@ -52,6 +52,8 @@
       <button class="nav" data-view="market">Marketplace</button>
       <button class="nav" data-view="rewards">Rewards</button>
       <button class="nav admin-only hidden" data-view="admin">Admin</button>
+    <button class="nav admin-only hidden" data-view="sellerReview">Seller Review</button>
+      <button class="nav admin-only hidden" data-view="sellerReview">Seller Review</button>
     </nav>
     <div class="top-actions">
       <button class="icon-btn" id="themeToggle" aria-label="Toggle theme">◐</button>
@@ -254,6 +256,45 @@
         <section class="panel founder-box"><h2>Founder Identity</h2><p>Title: <b>Founder</b></p><p>Banner: <b>Founder Crownline</b></p><p>Badge: <b>Origin Crown</b></p><button class="btn primary full" id="equipFounder">Equip Founder Kit</button></section>
       </div>
     </section>
+
+    <section id="sellerReview" class="view">
+      <div class="page-head founder-head">
+        <span>Seller Approval Desk 👑</span>
+        <h1>Review sellers like a control center.</h1>
+        <p>Pending creator/coach applications appear here with profile, status, timestamp and fast approve/reject controls.</p>
+      </div>
+      <div class="seller-review-layout">
+        <section class="panel seller-review-hero">
+          <div class="review-kpis">
+            <div><b id="sellerPendingCount">0</b><small>Pending</small></div>
+            <div><b id="sellerApprovedCount">0</b><small>Approved</small></div>
+            <div><b id="sellerRejectedCount">0</b><small>Rejected</small></div>
+          </div>
+          <div class="review-toolbar">
+            <button class="mini active" data-seller-filter="pending">Pending</button>
+            <button class="mini" data-seller-filter="approved">Approved</button>
+            <button class="mini" data-seller-filter="rejected">Rejected</button>
+            <button class="mini" data-seller-filter="all">All</button>
+            <button class="mini" id="refreshSellerDesk">Refresh</button>
+          </div>
+        </section>
+        <section class="panel seller-review-panel">
+          <div class="panel-head"><h2>Seller Applications</h2><span class="chip" id="sellerDeskStatus">Live</span></div>
+          <div id="sellerReviewList" class="seller-review-list"></div>
+        </section>
+        <section class="panel seller-help-panel">
+          <h2>Approval Rules</h2>
+          <p class="muted">Approve only real coaches, service providers or trusted community sellers. Rejected users can apply again later.</p>
+          <div class="rule-list">
+            <span>✅ Profile exists</span>
+            <span>✅ No ban flag</span>
+            <span>✅ Clear seller purpose</span>
+            <span>✅ Admin final control</span>
+          </div>
+        </section>
+      </div>
+    </section>
+
   </main>
 
   <button id="scrollTop" class="scroll-top" aria-label="Scroll to top">↑</button>
