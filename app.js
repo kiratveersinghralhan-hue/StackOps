@@ -2323,7 +2323,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <button class="close" type="button" id="closeManualPayment">×</button>
           <span class="eyebrow">Secure Manual Payment</span>
           <h2 id="manualPayTitle">Complete Payment</h2>
-          <p class="muted">Pay to StackOps first. Admin verifies proof, then the seller delivers. Platform commission is tracked automatically.</p>
+          <p class="muted">Pay to StackOps UPI first. Admin verifies your proof manually, then the seller delivers. Approval may take 24–48 hours.</p>
           <div class="upi-box">
             <div><small>Amount</small><b id="manualPayAmount">₹0</b></div>
             <div><small>UPI ID</small><b id="manualUpiId"></b></div>
@@ -2331,11 +2331,15 @@ document.addEventListener('DOMContentLoaded', () => {
           <div id="manualQrWrap" class="manual-qr hidden"><img id="manualQrImg" alt="UPI QR"></div>
           <button class="btn dark full" id="copyUpiBtn">Copy UPI ID</button>
           <label class="proof-upload">
-            <span>Upload payment screenshot/proof</span>
+            <span>Upload payment screenshot/proof <b>(reference number must be clearly visible)</b></span>
             <input id="paymentProofFile" type="file" accept="image/*,.pdf">
           </label>
+          <label class="proof-upload">
+            <span>Payment reference / UTR number</span>
+            <input id="paymentReferenceNumber" type="text" placeholder="Enter UPI reference / UTR number">
+          </label>
           <button class="btn primary full" id="submitManualProofBtn">Submit Payment Proof</button>
-          <small class="muted">After approval, your order status changes to approved. If rejected, upload a correct proof again.</small>
+          <small class="muted">After submission, approval can take <b>24–48 hours</b> because StackOps manually checks proof. Upload clear screenshot with reference number visible.</small>
         </div>
       </div>`);
     document.querySelector('#closeManualPayment')?.addEventListener('click',()=>document.querySelector('#manualPaymentModal')?.classList.remove('active'));
@@ -2399,14 +2403,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (qr) { document.querySelector('#manualQrImg').src = qr; document.querySelector('#manualQrWrap').classList.remove('hidden'); }
     else document.querySelector('#manualQrWrap').classList.add('hidden');
     const card = document.querySelector('.manual-pay-card .muted');
-    if (card) card.innerHTML = `Pay StackOps first. Commission: <b>${pct}% (${money(commission)})</b>. Seller payout after completion: <b>${money(sellerGets)}</b>.`;
+    if (card) card.innerHTML = `Pay to UPI <b>${upiId()}</b>. Commission: <b>${pct}% (${money(commission)})</b>. Seller payout after completion: <b>${money(sellerGets)}</b>.`;
     document.querySelector('#manualPaymentModal').classList.add('active');
   }
 
   async function submitManualPaymentProof(){
     if (!selectedManualOrder || needLogin()) return;
     const file = document.querySelector('#paymentProofFile')?.files?.[0];
+    const referenceNumber = document.querySelector('#paymentReferenceNumber')?.value?.trim();
     if (!file) return toast('Upload payment screenshot first');
+    if (!referenceNumber || referenceNumber.length < 6) return toast('Enter payment reference / UTR number');
     const { pct, commission, sellerGets } = middlemanCommission(selectedManualOrder.price_inr);
     let proofPath = '';
     if (sb) {
@@ -2424,17 +2430,18 @@ document.addEventListener('DOMContentLoaded', () => {
         commission_inr: commission,
         seller_payout_inr: sellerGets,
         proof_path: proofPath,
+        reference_number: referenceNumber,
         status: 'pending'
       };
       const ins = await sb.from('manual_orders').insert(row);
       if (ins.error) return toast('Payment request failed: ' + ins.error.message);
     } else {
       const rows = JSON.parse(localStorage.stackopsManualOrders || '[]');
-      rows.unshift({id:'local-'+Date.now(), service_title:selectedManualOrder.title, amount_inr:selectedManualOrder.price_inr, status:'pending', created_at:new Date().toISOString()});
+      rows.unshift({id:'local-'+Date.now(), service_title:selectedManualOrder.title, amount_inr:selectedManualOrder.price_inr, reference_number: referenceNumber, status:'pending', created_at:new Date().toISOString()});
       localStorage.stackopsManualOrders = JSON.stringify(rows);
     }
     document.querySelector('#manualPaymentModal')?.classList.remove('active');
-    toast('Payment proof submitted. Admin will approve after checking.');
+    toast('Payment proof submitted. It will reflect in your account after admin verification within 24–48 hours.');
     selectedManualOrder = null;
     renderManualOrdersAdmin();
   }
@@ -2482,7 +2489,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const { data, error } = await sb.from('manual_orders').select('*').order('created_at',{ascending:false}).limit(50);
     if (error) { host.innerHTML = 'Cannot load payments: ' + safe(error.message); return; }
     const rows = data || [];
-    host.innerHTML = rows.map(o => `<div class="manual-order-card ${safe(o.status)}"><b>${safe(o.service_title)}</b><small>${money(o.amount_inr)} · ${safe(o.status)} · Commission ${money(o.commission_inr)} · Seller payout ${money(o.seller_payout_inr)}</small><div class="row-actions"><button class="mini" onclick="viewPaymentProof('${safe(o.proof_path || '')}')">View Proof</button><button class="mini success" onclick="approveManualOrder('${o.id}')">Approve</button><button class="mini danger" onclick="rejectManualOrder('${o.id}')">Reject</button><button class="mini" onclick="markSellerPaid('${o.id}')">Mark Seller Paid</button></div></div>`).join('') || 'No manual payment requests yet';
+    host.innerHTML = rows.map(o => `<div class="manual-order-card ${safe(o.status)}"><b>${safe(o.service_title)}</b><small>${money(o.amount_inr)} · ${safe(o.status)} · Ref/UTR: ${safe(o.reference_number || 'not entered')} · Commission ${money(o.commission_inr)} · Seller payout ${money(o.seller_payout_inr)}</small><div class="row-actions"><button class="mini" onclick="viewPaymentProof('${safe(o.proof_path || '')}')">View Proof</button><button class="mini success" onclick="approveManualOrder('${o.id}')">Approve Buyer Access</button><button class="mini danger" onclick="rejectManualOrder('${o.id}')">Reject</button><button class="mini" onclick="markSellerPaid('${o.id}')">Mark Seller Paid</button></div></div>`).join('') || 'No manual payment requests yet';
   }
 
   window.viewPaymentProof = async function(path){

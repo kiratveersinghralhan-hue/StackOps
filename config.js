@@ -16,8 +16,8 @@ window.STACKOPS_CONFIG = {
   RAZORPAY_CONTACT_EMAIL: 'kiratveersinghralhan@gmail.com',
 
   // Manual UPI fallback: payments come to YOU first. Admin verifies proof, then seller payout is tracked.
-  MANUAL_UPI_ID: 'yourupi@bank',
-  MANUAL_UPI_QR_URL: '',
+  MANUAL_UPI_ID: 'ralhanx@ptaxis',
+  MANUAL_UPI_QR_URL: 'upi-qr.jpeg',
   ADMIN_EMAILS: ['kiratveersinghralhan@gmail.com','qq299629@gmail.com'],
   DEFAULT_LANGUAGE: 'en',
   STORAGE_BUCKETS: {
